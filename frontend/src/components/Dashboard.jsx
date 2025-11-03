@@ -198,7 +198,7 @@ const Dashboard = () => {
                 <FileText className="mx-auto mb-4 text-gray-400" size={64} />
                 <h3 className="text-xl font-semibold text-gray-700 mb-2">No Project Selected</h3>
                 <p className="text-gray-500 mb-6">Create a new project or select an existing one to get started</p>
-                <Button onClick={() => setShowProjectDialog(true)} className="btn-primary">
+                <Button onClick={() => setShowProjectDialog(true)} className="btn-dark">
                   <Plus className="mr-2" size={18} />
                   Create Your First Project
                 </Button>

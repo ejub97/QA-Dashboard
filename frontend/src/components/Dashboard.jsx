@@ -129,7 +129,7 @@ const Dashboard = () => {
             </div>
             <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
               <DialogTrigger asChild>
-                <Button className="btn-primary" data-testid="create-project-btn">
+                <Button className="btn-dark" data-testid="create-project-btn">
                   <Plus className="mr-2" size={18} />
                   New Project
                 </Button>

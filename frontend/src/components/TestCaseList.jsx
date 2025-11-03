@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Edit, Trash2, FileSpreadsheet, FileText, Table } from 'lucide-react';
+import { Plus, Edit, Trash2, FileSpreadsheet, FileText, X, Edit2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,

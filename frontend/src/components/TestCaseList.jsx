@@ -186,7 +186,7 @@ const TestCaseList = ({ project }) => {
             data-testid="export-csv-btn"
           >
             <FileSpreadsheet size={16} className="mr-2" />
-            CSV
+            Export CSV
           </Button>
           <Button
             onClick={() => handleExport('excel')}
@@ -195,18 +195,8 @@ const TestCaseList = ({ project }) => {
             className="btn-secondary"
             data-testid="export-excel-btn"
           >
-            <Table size={16} className="mr-2" />
-            Excel
-          </Button>
-          <Button
-            onClick={() => handleExport('docx')}
-            variant="outline"
-            size="sm"
-            className="btn-secondary"
-            data-testid="export-docx-btn"
-          >
             <FileText size={16} className="mr-2" />
-            Word
+            Export Excel
           </Button>
           <Button
             onClick={() => {

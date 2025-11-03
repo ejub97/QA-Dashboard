@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -16,11 +16,12 @@ from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import secrets
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment
+import pandas as pd
 
 
-ROOT_DIR = Path(__file__).parent
+ROOT_DIR = Path(__file__).nparent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
@@ -49,20 +50,30 @@ class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = ""
 
+class Comment(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    text: str
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 class TestCase(BaseModel):
     model_config = ConfigDict(extra="ignore")
     
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     project_id: str
-    tab: str = "General"  # Tab/Section name
+    tab: str = "General"
     title: str
     description: str
-    priority: str  # low, medium, high
-    type: str  # functional, negative, ui/ux, smoke, regression, api
+    priority: str
+    type: str
     steps: str
     expected_result: str
     actual_result: Optional[str] = ""
-    status: str = "draft"  # draft, success, fail
+    status: str = "draft"
+    assigned_to: Optional[str] = ""
+    executed_at: Optional[datetime] = None
+    comments: List[Comment] = []
+    is_template: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -76,6 +87,8 @@ class TestCaseCreate(BaseModel):
     steps: str
     expected_result: str
     actual_result: Optional[str] = ""
+    assigned_to: Optional[str] = ""
+    is_template: Optional[bool] = False
 
 class TestCaseUpdate(BaseModel):
     tab: Optional[str] = None
@@ -87,9 +100,20 @@ class TestCaseUpdate(BaseModel):
     expected_result: Optional[str] = None
     actual_result: Optional[str] = None
     status: Optional[str] = None
+    assigned_to: Optional[str] = None
+    executed_at: Optional[datetime] = None
 
 class StatusUpdate(BaseModel):
     status: str
+
+class BulkStatusUpdate(BaseModel):
+    test_case_ids: List[str]
+    status: str
+
+class CommentCreate(BaseModel):
+    test_case_id: str
+    text: str
+    created_by: str
 
 
 # Project Routes
@@ -140,10 +164,7 @@ async def get_project_by_invite(invite_code: str):
 
 @api_router.delete("/projects/{project_id}")
 async def delete_project(project_id: str):
-    # Delete all test cases for this project first
     await db.test_cases.delete_many({"project_id": project_id})
-    
-    # Delete the project
     result = await db.projects.delete_one({"id": project_id})
     
     if result.deleted_count == 0:
@@ -153,18 +174,42 @@ async def delete_project(project_id: str):
 
 @api_router.get("/projects/{project_id}/tabs")
 async def get_project_tabs(project_id: str):
-    """Get unique tabs for a project"""
     test_cases = await db.test_cases.find({"project_id": project_id}, {"_id": 0, "tab": 1}).to_list(1000)
     tabs = list(set([tc.get('tab', 'General') for tc in test_cases]))
     if not tabs:
         tabs = ["General"]
     return {"tabs": sorted(tabs)}
 
+@api_router.get("/projects/{project_id}/statistics")
+async def get_project_statistics(project_id: str):
+    test_cases = await db.test_cases.find({"project_id": project_id, "is_template": False}, {"_id": 0}).to_list(1000)
+    
+    stats = {
+        "total": len(test_cases),
+        "draft": len([tc for tc in test_cases if tc.get('status') == 'draft']),
+        "success": len([tc for tc in test_cases if tc.get('status') == 'success']),
+        "fail": len([tc for tc in test_cases if tc.get('status') == 'fail']),
+        "by_priority": {
+            "low": len([tc for tc in test_cases if tc.get('priority') == 'low']),
+            "medium": len([tc for tc in test_cases if tc.get('priority') == 'medium']),
+            "high": len([tc for tc in test_cases if tc.get('priority') == 'high'])
+        },
+        "by_tab": {}
+    }
+    
+    for tc in test_cases:
+        tab = tc.get('tab', 'General')
+        if tab not in stats["by_tab"]:
+            stats["by_tab"][tab] = {"total": 0, "draft": 0, "success": 0, "fail": 0}
+        stats["by_tab"][tab]["total"] += 1
+        stats["by_tab"][tab][tc.get('status', 'draft')] += 1
+    
+    return stats
+
 
 # Test Case Routes
 @api_router.post("/test-cases", response_model=TestCase)
 async def create_test_case(input: TestCaseCreate):
-    # Verify project exists
     project = await db.projects.find_one({"id": input.project_id})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -175,17 +220,21 @@ async def create_test_case(input: TestCaseCreate):
     doc = test_case_obj.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     doc['updated_at'] = doc['updated_at'].isoformat()
+    if doc['executed_at']:
+        doc['executed_at'] = doc['executed_at'].isoformat()
     
     await db.test_cases.insert_one(doc)
     return test_case_obj
 
 @api_router.get("/test-cases", response_model=List[TestCase])
-async def get_test_cases(project_id: Optional[str] = None, tab: Optional[str] = None):
+async def get_test_cases(project_id: Optional[str] = None, tab: Optional[str] = None, is_template: Optional[bool] = None, search: Optional[str] = None):
     query = {}
     if project_id:
         query["project_id"] = project_id
     if tab:
         query["tab"] = tab
+    if is_template is not None:
+        query["is_template"] = is_template
     
     test_cases = await db.test_cases.find(query, {"_id": 0}).to_list(1000)
     
@@ -194,22 +243,42 @@ async def get_test_cases(project_id: Optional[str] = None, tab: Optional[str] = 
             tc['created_at'] = datetime.fromisoformat(tc['created_at'])
         if isinstance(tc['updated_at'], str):
             tc['updated_at'] = datetime.fromisoformat(tc['updated_at'])
+        if tc.get('executed_at') and isinstance(tc['executed_at'], str):
+            tc['executed_at'] = datetime.fromisoformat(tc['executed_at'])
+    
+    # Search filter
+    if search:
+        search_lower = search.lower()
+        test_cases = [tc for tc in test_cases if 
+                      search_lower in tc.get('title', '').lower() or 
+                      search_lower in tc.get('description', '').lower() or
+                      search_lower in tc.get('steps', '').lower()]
     
     return test_cases
 
-@api_router.get("/test-cases/{test_case_id}", response_model=TestCase)
-async def get_test_case(test_case_id: str):
+@api_router.post("/test-cases/{test_case_id}/duplicate", response_model=TestCase)
+async def duplicate_test_case(test_case_id: str):
     test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
     
     if not test_case:
         raise HTTPException(status_code=404, detail="Test case not found")
     
-    if isinstance(test_case['created_at'], str):
-        test_case['created_at'] = datetime.fromisoformat(test_case['created_at'])
-    if isinstance(test_case['updated_at'], str):
-        test_case['updated_at'] = datetime.fromisoformat(test_case['updated_at'])
+    # Create new test case with same data
+    new_tc = TestCase(**test_case)
+    new_tc.id = str(uuid.uuid4())
+    new_tc.title = f"{test_case['title']} (Copy)"
+    new_tc.created_at = datetime.now(timezone.utc)
+    new_tc.updated_at = datetime.now(timezone.utc)
+    new_tc.comments = []
     
-    return test_case
+    doc = new_tc.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    doc['updated_at'] = doc['updated_at'].isoformat()
+    if doc.get('executed_at'):
+        doc['executed_at'] = doc['executed_at'].isoformat()
+    
+    await db.test_cases.insert_one(doc)
+    return new_tc
 
 @api_router.put("/test-cases/{test_case_id}", response_model=TestCase)
 async def update_test_case(test_case_id: str, input: TestCaseUpdate):
@@ -220,6 +289,9 @@ async def update_test_case(test_case_id: str, input: TestCaseUpdate):
     
     update_data = {k: v for k, v in input.model_dump().items() if v is not None}
     update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+    
+    if 'executed_at' in update_data and update_data['executed_at']:
+        update_data['executed_at'] = update_data['executed_at'].isoformat()
     
     await db.test_cases.update_one(
         {"id": test_case_id},
@@ -232,6 +304,8 @@ async def update_test_case(test_case_id: str, input: TestCaseUpdate):
         updated_test_case['created_at'] = datetime.fromisoformat(updated_test_case['created_at'])
     if isinstance(updated_test_case['updated_at'], str):
         updated_test_case['updated_at'] = datetime.fromisoformat(updated_test_case['updated_at'])
+    if updated_test_case.get('executed_at') and isinstance(updated_test_case['executed_at'], str):
+        updated_test_case['executed_at'] = datetime.fromisoformat(updated_test_case['executed_at'])
     
     return updated_test_case
 
@@ -242,9 +316,18 @@ async def update_test_case_status(test_case_id: str, input: StatusUpdate):
     if not test_case:
         raise HTTPException(status_code=404, detail="Test case not found")
     
+    update_data = {
+        "status": input.status, 
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Set executed_at when changing to success or fail
+    if input.status in ['success', 'fail']:
+        update_data['executed_at'] = datetime.now(timezone.utc).isoformat()
+    
     await db.test_cases.update_one(
         {"id": test_case_id},
-        {"$set": {"status": input.status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        {"$set": update_data}
     )
     
     updated_test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
@@ -253,8 +336,32 @@ async def update_test_case_status(test_case_id: str, input: StatusUpdate):
         updated_test_case['created_at'] = datetime.fromisoformat(updated_test_case['created_at'])
     if isinstance(updated_test_case['updated_at'], str):
         updated_test_case['updated_at'] = datetime.fromisoformat(updated_test_case['updated_at'])
+    if updated_test_case.get('executed_at') and isinstance(updated_test_case['executed_at'], str):
+        updated_test_case['executed_at'] = datetime.fromisoformat(updated_test_case['executed_at'])
     
     return updated_test_case
+
+@api_router.post("/test-cases/bulk-status")
+async def bulk_update_status(input: BulkStatusUpdate):
+    update_data = {
+        "status": input.status,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    if input.status in ['success', 'fail']:
+        update_data['executed_at'] = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.test_cases.update_many(
+        {"id": {"$in": input.test_case_ids}},
+        {"$set": update_data}
+    )
+    
+    return {"updated_count": result.modified_count}
+
+@api_router.delete("/test-cases/bulk")
+async def bulk_delete_test_cases(test_case_ids: List[str]):
+    result = await db.test_cases.delete_many({"id": {"$in": test_case_ids}})
+    return {"deleted_count": result.deleted_count}
 
 @api_router.delete("/test-cases/{test_case_id}")
 async def delete_test_case(test_case_id: str):
@@ -265,61 +372,80 @@ async def delete_test_case(test_case_id: str):
     
     return {"message": "Test case deleted successfully"}
 
+@api_router.post("/test-cases/{test_case_id}/comments", response_model=Comment)
+async def add_comment(test_case_id: str, input: CommentCreate):
+    test_case = await db.test_cases.find_one({"id": test_case_id})
+    if not test_case:
+        raise HTTPException(status_code=404, detail="Test case not found")
+    
+    comment = Comment(text=input.text, created_by=input.created_by)
+    comment_dict = comment.model_dump()
+    comment_dict['created_at'] = comment_dict['created_at'].isoformat()
+    
+    await db.test_cases.update_one(
+        {"id": test_case_id},
+        {"$push": {"comments": comment_dict}}
+    )
+    
+    return comment
 
-# Export Routes
-@api_router.get("/test-cases/export/csv/{project_id}")
-async def export_csv(project_id: str):
-    # Get project
+
+# Import/Export Routes
+@api_router.post("/test-cases/import/{project_id}")
+async def import_test_cases(project_id: str, file: UploadFile = File(...)):
     project = await db.projects.find_one({"id": project_id})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Get test cases sorted by tab and created_at
-    test_cases = await db.test_cases.find({"project_id": project_id}, {"_id": 0}).to_list(1000)
-    test_cases.sort(key=lambda x: (x.get('tab', 'General'), x.get('created_at', '')))
+    contents = await file.read()
     
-    # Create CSV in memory
-    output = io.StringIO()
-    writer = csv.writer(output)
-    
-    # Write header
-    writer.writerow(['TC ID', 'Tab', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status'])
-    
-    # Write data with TC ID
-    for idx, tc in enumerate(test_cases, start=1):
-        tc_id = f"TC{str(idx).zfill(3)}"
-        writer.writerow([
-            tc_id,
-            tc.get('tab', 'General'),
-            tc.get('title', ''),
-            tc.get('description', ''),
-            tc.get('priority', ''),
-            tc.get('type', ''),
-            tc.get('steps', ''),
-            tc.get('expected_result', ''),
-            tc.get('actual_result', ''),
-            tc.get('status', '')
-        ])
-    
-    output.seek(0)
-    
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={project['name']}_test_cases.csv"}
-    )
+    try:
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(contents))
+        elif file.filename.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(io.BytesIO(contents))
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format")
+        
+        imported_count = 0
+        for _, row in df.iterrows():
+            tc_data = {
+                "project_id": project_id,
+                "tab": row.get('Tab', row.get('tab', 'General')),
+                "title": row.get('Title', row.get('title', '')),
+                "description": row.get('Description', row.get('description', '')),
+                "priority": row.get('Priority', row.get('priority', 'medium')),
+                "type": row.get('Type', row.get('type', 'functional')),
+                "steps": row.get('Steps', row.get('steps', '')),
+                "expected_result": row.get('Expected Result', row.get('expected_result', '')),
+                "actual_result": row.get('Actual Result', row.get('actual_result', '')),
+            }
+            
+            if tc_data['title']:  # Only import if title exists
+                tc_create = TestCaseCreate(**tc_data)
+                tc = TestCase(**tc_create.model_dump())
+                doc = tc.model_dump()
+                doc['created_at'] = doc['created_at'].isoformat()
+                doc['updated_at'] = doc['updated_at'].isoformat()
+                if doc.get('executed_at'):
+                    doc['executed_at'] = doc['executed_at'].isoformat()
+                
+                await db.test_cases.insert_one(doc)
+                imported_count += 1
+        
+        return {"imported_count": imported_count}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Import failed: {str(e)}")
+
 
 @api_router.get("/test-cases/export/excel/{project_id}")
 async def export_excel(project_id: str):
-    # Get project
     project = await db.projects.find_one({"id": project_id})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Get test cases
-    test_cases = await db.test_cases.find({"project_id": project_id}, {"_id": 0}).to_list(1000)
+    test_cases = await db.test_cases.find({"project_id": project_id, "is_template": False}, {"_id": 0}).to_list(1000)
     
-    # Group test cases by tab
     tabs_dict = {}
     for tc in test_cases:
         tab = tc.get('tab', 'General')
@@ -327,46 +453,40 @@ async def export_excel(project_id: str):
             tabs_dict[tab] = []
         tabs_dict[tab].append(tc)
     
-    # Sort test cases within each tab by created_at
     for tab in tabs_dict:
         tabs_dict[tab].sort(key=lambda x: x.get('created_at', ''))
     
-    # Create Excel workbook
     wb = Workbook()
-    wb.remove(wb.active)  # Remove default sheet
+    wb.remove(wb.active)
     
-    # Define header style
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF")
     header_alignment = Alignment(horizontal="center", vertical="center")
-    
-    # Define data cell alignment with wrap text
     data_alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
     
-    # Create a sheet for each tab
     global_counter = 1
     for tab_name in sorted(tabs_dict.keys()):
-        # Sanitize sheet name (Excel has limitations)
         safe_sheet_name = tab_name[:31].replace('/', '-').replace('\\', '-').replace('*', '').replace('?', '').replace('[', '').replace(']', '')
         ws = wb.create_sheet(title=safe_sheet_name)
         
-        # Write headers
-        headers = ['TC ID', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status']
+        headers = ['TC ID', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status', 'Assigned To', 'Executed At']
         ws.append(headers)
         
-        # Style header row
         for cell in ws[1]:
             cell.fill = header_fill
             cell.font = header_font
             cell.alignment = header_alignment
         
-        # Write data
         for tc in tabs_dict[tab_name]:
             tc_id = f"TC{str(global_counter).zfill(3)}"
             global_counter += 1
             
-            # Format steps to ensure each step is on a new line
-            steps = tc.get('steps', '')
+            executed_at = ''
+            if tc.get('executed_at'):
+                if isinstance(tc['executed_at'], str):
+                    executed_at = tc['executed_at'].split('T')[0]
+                else:
+                    executed_at = tc['executed_at'].strftime('%Y-%m-%d')
             
             row_data = [
                 tc_id,
@@ -374,23 +494,22 @@ async def export_excel(project_id: str):
                 tc.get('description', ''),
                 tc.get('priority', ''),
                 tc.get('type', ''),
-                steps,
+                tc.get('steps', ''),
                 tc.get('expected_result', ''),
                 tc.get('actual_result', ''),
-                tc.get('status', '')
+                tc.get('status', ''),
+                tc.get('assigned_to', ''),
+                executed_at
             ]
             ws.append(row_data)
             
-            # Apply wrap text and alignment to data cells
             current_row = ws.max_row
             for cell in ws[current_row]:
                 cell.alignment = data_alignment
         
-        # Set row heights to auto
         for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-            ws.row_dimensions[row[0].row].height = None  # Auto height
+            ws.row_dimensions[row[0].row].height = None
         
-        # Adjust column widths
         ws.column_dimensions['A'].width = 10
         ws.column_dimensions['B'].width = 25
         ws.column_dimensions['C'].width = 30
@@ -400,18 +519,18 @@ async def export_excel(project_id: str):
         ws.column_dimensions['G'].width = 35
         ws.column_dimensions['H'].width = 35
         ws.column_dimensions['I'].width = 12
+        ws.column_dimensions['J'].width = 15
+        ws.column_dimensions['K'].width = 15
     
-    # If no test cases, create a default sheet
     if not tabs_dict:
         ws = wb.create_sheet(title="General")
-        headers = ['TC ID', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status']
+        headers = ['TC ID', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status', 'Assigned To', 'Executed At']
         ws.append(headers)
         for cell in ws[1]:
             cell.fill = header_fill
             cell.font = header_font
             cell.alignment = header_alignment
     
-    # Save to memory
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
@@ -424,27 +543,21 @@ async def export_excel(project_id: str):
 
 @api_router.get("/test-cases/export/docx/{project_id}")
 async def export_docx(project_id: str):
-    # Get project
     project = await db.projects.find_one({"id": project_id})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Get test cases sorted by tab
-    test_cases = await db.test_cases.find({"project_id": project_id}, {"_id": 0}).to_list(1000)
+    test_cases = await db.test_cases.find({"project_id": project_id, "is_template": False}, {"_id": 0}).to_list(1000)
     test_cases.sort(key=lambda x: (x.get('tab', 'General'), x.get('created_at', '')))
     
-    # Create Word document
     doc = Document()
     
-    # Add title
     title = doc.add_heading(f"{project['name']} - Test Cases", 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # Add table
     table = doc.add_table(rows=1, cols=9)
     table.style = 'Light Grid Accent 1'
     
-    # Header row
     hdr_cells = table.rows[0].cells
     headers = ['TC ID', 'Tab', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result']
     for i, header in enumerate(headers):
@@ -453,7 +566,6 @@ async def export_docx(project_id: str):
             for run in paragraph.runs:
                 run.font.bold = True
     
-    # Data rows
     for idx, tc in enumerate(test_cases, start=1):
         tc_id = f"TC{str(idx).zfill(3)}"
         row_cells = table.add_row().cells
@@ -463,15 +575,10 @@ async def export_docx(project_id: str):
         row_cells[3].text = tc.get('description', '')
         row_cells[4].text = tc.get('priority', '')
         row_cells[5].text = tc.get('type', '')
-        
-        # Format steps to ensure each step is on a new line
-        steps = tc.get('steps', '')
-        row_cells[6].text = steps
-        
+        row_cells[6].text = tc.get('steps', '')
         row_cells[7].text = tc.get('expected_result', '')
         row_cells[8].text = tc.get('actual_result', '')
     
-    # Save to memory
     output = io.BytesIO()
     doc.save(output)
     output.seek(0)
@@ -483,7 +590,6 @@ async def export_docx(project_id: str):
     )
 
 
-# Include the router in the main app
 app.include_router(api_router)
 
 app.add_middleware(
@@ -494,7 +600,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'

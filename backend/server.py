@@ -133,6 +133,19 @@ async def get_project_by_invite(invite_code: str):
     
     return project
 
+@api_router.delete("/projects/{project_id}")
+async def delete_project(project_id: str):
+    # Delete all test cases for this project first
+    await db.test_cases.delete_many({"project_id": project_id})
+    
+    # Delete the project
+    result = await db.projects.delete_one({"id": project_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    return {"message": "Project and associated test cases deleted successfully"}
+
 
 # Test Case Routes
 @api_router.post("/test-cases", response_model=TestCase)

@@ -1,0 +1,364 @@
+import requests
+import sys
+import json
+from datetime import datetime
+
+class QADashboardAPITester:
+    def __init__(self, base_url="https://qadashboard-1.preview.emergentagent.com"):
+        self.base_url = base_url
+        self.api_url = f"{base_url}/api"
+        self.tests_run = 0
+        self.tests_passed = 0
+        self.project_id = None
+        self.test_case_id = None
+        self.invite_code = None
+
+    def run_test(self, name, method, endpoint, expected_status, data=None, params=None):
+        """Run a single API test"""
+        url = f"{self.api_url}/{endpoint}"
+        headers = {'Content-Type': 'application/json'}
+
+        self.tests_run += 1
+        print(f"\n🔍 Testing {name}...")
+        print(f"   URL: {url}")
+        
+        try:
+            if method == 'GET':
+                response = requests.get(url, headers=headers, params=params)
+            elif method == 'POST':
+                response = requests.post(url, json=data, headers=headers)
+            elif method == 'PUT':
+                response = requests.put(url, json=data, headers=headers)
+            elif method == 'PATCH':
+                response = requests.patch(url, json=data, headers=headers)
+            elif method == 'DELETE':
+                response = requests.delete(url, headers=headers)
+
+            success = response.status_code == expected_status
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                try:
+                    response_data = response.json()
+                    print(f"   Response: {json.dumps(response_data, indent=2)[:200]}...")
+                    return True, response_data
+                except:
+                    return True, {}
+            else:
+                print(f"❌ Failed - Expected {expected_status}, got {response.status_code}")
+                try:
+                    error_data = response.json()
+                    print(f"   Error: {error_data}")
+                except:
+                    print(f"   Error: {response.text}")
+                return False, {}
+
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False, {}
+
+    def test_create_project(self):
+        """Test project creation"""
+        project_data = {
+            "name": f"Test Project {datetime.now().strftime('%H%M%S')}",
+            "description": "Test project for API testing"
+        }
+        success, response = self.run_test(
+            "Create Project",
+            "POST",
+            "projects",
+            200,
+            data=project_data
+        )
+        if success and 'id' in response:
+            self.project_id = response['id']
+            self.invite_code = response.get('invite_code')
+            return True
+        return False
+
+    def test_get_projects(self):
+        """Test getting all projects"""
+        success, response = self.run_test(
+            "Get All Projects",
+            "GET",
+            "projects",
+            200
+        )
+        return success and isinstance(response, list)
+
+    def test_get_project_by_id(self):
+        """Test getting project by ID"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        success, response = self.run_test(
+            "Get Project by ID",
+            "GET",
+            f"projects/{self.project_id}",
+            200
+        )
+        return success and response.get('id') == self.project_id
+
+    def test_get_project_by_invite(self):
+        """Test getting project by invite code"""
+        if not self.invite_code:
+            print("❌ Skipping - No invite code available")
+            return False
+        
+        success, response = self.run_test(
+            "Get Project by Invite Code",
+            "GET",
+            f"projects/invite/{self.invite_code}",
+            200
+        )
+        return success and response.get('invite_code') == self.invite_code
+
+    def test_create_test_case(self):
+        """Test test case creation"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        test_case_data = {
+            "project_id": self.project_id,
+            "title": "Sample Test Case",
+            "description": "This is a test case for API testing",
+            "priority": "high",
+            "type": "functional",
+            "steps": "1. Open application\n2. Click login button\n3. Enter credentials",
+            "expected_result": "User should be logged in successfully",
+            "actual_result": ""
+        }
+        success, response = self.run_test(
+            "Create Test Case",
+            "POST",
+            "test-cases",
+            200,
+            data=test_case_data
+        )
+        if success and 'id' in response:
+            self.test_case_id = response['id']
+            return True
+        return False
+
+    def test_get_test_cases(self):
+        """Test getting test cases"""
+        success, response = self.run_test(
+            "Get All Test Cases",
+            "GET",
+            "test-cases",
+            200
+        )
+        return success and isinstance(response, list)
+
+    def test_get_test_cases_by_project(self):
+        """Test getting test cases by project"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        success, response = self.run_test(
+            "Get Test Cases by Project",
+            "GET",
+            "test-cases",
+            200,
+            params={"project_id": self.project_id}
+        )
+        return success and isinstance(response, list)
+
+    def test_get_test_case_by_id(self):
+        """Test getting test case by ID"""
+        if not self.test_case_id:
+            print("❌ Skipping - No test case ID available")
+            return False
+        
+        success, response = self.run_test(
+            "Get Test Case by ID",
+            "GET",
+            f"test-cases/{self.test_case_id}",
+            200
+        )
+        return success and response.get('id') == self.test_case_id
+
+    def test_update_test_case(self):
+        """Test updating test case"""
+        if not self.test_case_id:
+            print("❌ Skipping - No test case ID available")
+            return False
+        
+        update_data = {
+            "title": "Updated Test Case Title",
+            "description": "Updated description",
+            "actual_result": "Test completed successfully"
+        }
+        success, response = self.run_test(
+            "Update Test Case",
+            "PUT",
+            f"test-cases/{self.test_case_id}",
+            200,
+            data=update_data
+        )
+        return success and response.get('title') == update_data['title']
+
+    def test_update_test_case_status(self):
+        """Test updating test case status"""
+        if not self.test_case_id:
+            print("❌ Skipping - No test case ID available")
+            return False
+        
+        status_data = {"status": "success"}
+        success, response = self.run_test(
+            "Update Test Case Status",
+            "PATCH",
+            f"test-cases/{self.test_case_id}/status",
+            200,
+            data=status_data
+        )
+        return success and response.get('status') == 'success'
+
+    def test_export_csv(self):
+        """Test CSV export"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        url = f"{self.api_url}/test-cases/export/csv/{self.project_id}"
+        print(f"\n🔍 Testing Export CSV...")
+        print(f"   URL: {url}")
+        
+        try:
+            response = requests.get(url)
+            success = response.status_code == 200 and 'text/csv' in response.headers.get('content-type', '')
+            self.tests_run += 1
+            
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                print(f"   Content-Type: {response.headers.get('content-type')}")
+                return True
+            else:
+                print(f"❌ Failed - Status: {response.status_code}")
+                return False
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            self.tests_run += 1
+            return False
+
+    def test_export_docx(self):
+        """Test DOCX export"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        url = f"{self.api_url}/test-cases/export/docx/{self.project_id}"
+        print(f"\n🔍 Testing Export DOCX...")
+        print(f"   URL: {url}")
+        
+        try:
+            response = requests.get(url)
+            success = response.status_code == 200 and 'officedocument' in response.headers.get('content-type', '')
+            self.tests_run += 1
+            
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                print(f"   Content-Type: {response.headers.get('content-type')}")
+                return True
+            else:
+                print(f"❌ Failed - Status: {response.status_code}")
+                return False
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            self.tests_run += 1
+            return False
+
+    def test_delete_test_case(self):
+        """Test deleting test case"""
+        if not self.test_case_id:
+            print("❌ Skipping - No test case ID available")
+            return False
+        
+        success, response = self.run_test(
+            "Delete Test Case",
+            "DELETE",
+            f"test-cases/{self.test_case_id}",
+            200
+        )
+        return success
+
+    def test_invalid_endpoints(self):
+        """Test invalid endpoints for proper error handling"""
+        print("\n🔍 Testing Error Handling...")
+        
+        # Test invalid project ID
+        success, _ = self.run_test(
+            "Invalid Project ID",
+            "GET",
+            "projects/invalid-id",
+            404
+        )
+        
+        # Test invalid test case ID
+        success2, _ = self.run_test(
+            "Invalid Test Case ID",
+            "GET",
+            "test-cases/invalid-id",
+            404
+        )
+        
+        # Test invalid invite code
+        success3, _ = self.run_test(
+            "Invalid Invite Code",
+            "GET",
+            "projects/invite/invalid-code",
+            404
+        )
+        
+        return success and success2 and success3
+
+def main():
+    print("🚀 Starting QA Dashboard API Tests")
+    print("=" * 50)
+    
+    tester = QADashboardAPITester()
+    
+    # Run all tests in sequence
+    test_results = []
+    
+    # Project tests
+    test_results.append(tester.test_create_project())
+    test_results.append(tester.test_get_projects())
+    test_results.append(tester.test_get_project_by_id())
+    test_results.append(tester.test_get_project_by_invite())
+    
+    # Test case tests
+    test_results.append(tester.test_create_test_case())
+    test_results.append(tester.test_get_test_cases())
+    test_results.append(tester.test_get_test_cases_by_project())
+    test_results.append(tester.test_get_test_case_by_id())
+    test_results.append(tester.test_update_test_case())
+    test_results.append(tester.test_update_test_case_status())
+    
+    # Export tests
+    test_results.append(tester.test_export_csv())
+    test_results.append(tester.test_export_docx())
+    
+    # Cleanup and error handling tests
+    test_results.append(tester.test_delete_test_case())
+    test_results.append(tester.test_invalid_endpoints())
+    
+    # Print final results
+    print("\n" + "=" * 50)
+    print(f"📊 Final Results: {tester.tests_passed}/{tester.tests_run} tests passed")
+    print(f"Success Rate: {(tester.tests_passed/tester.tests_run)*100:.1f}%")
+    
+    if tester.tests_passed == tester.tests_run:
+        print("🎉 All tests passed!")
+        return 0
+    else:
+        print("❌ Some tests failed!")
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(main())

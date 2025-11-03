@@ -146,7 +146,7 @@ const TestCaseForm = ({ testCase, onSubmit, onCancel }) => {
         <Button type="button" variant="outline" onClick={onCancel} data-testid="cancel-testcase-btn">
           Cancel
         </Button>
-        <Button type="submit" className="btn-primary" data-testid="submit-testcase-btn">
+        <Button type="submit" className="btn-dark" data-testid="submit-testcase-btn">
           {testCase ? 'Update' : 'Create'} Test Case
         </Button>
       </div>

@@ -124,13 +124,14 @@ const TestCaseForm = ({ testCase, onSubmit, onCancel, currentTab }) => {
         <Textarea
           id="steps"
           data-testid="testcase-steps-input"
-          placeholder="Enter test steps (one per line)"
+          placeholder="Enter test steps (one per line)&#10;1. First step&#10;2. Second step&#10;3. Third step"
           value={formData.steps}
           onChange={(e) => handleChange('steps', e.target.value)}
-          rows={4}
+          rows={5}
           className="input-focus"
           required
         />
+        <p className="text-xs text-gray-500 mt-1">Add each step on a new line with numbering (1., 2., 3...)</p>
       </div>
 
       <div>

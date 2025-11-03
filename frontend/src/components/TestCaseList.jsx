@@ -179,7 +179,7 @@ const TestCaseList = ({ project }) => {
               setEditingTestCase(null);
               setShowForm(true);
             }}
-            className="btn-primary"
+            className="btn-dark"
             size="sm"
             data-testid="add-testcase-btn"
           >

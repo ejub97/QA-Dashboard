@@ -31,6 +31,8 @@ const TestCaseList = ({ project }) => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [tabs, setTabs] = useState(['General']);
+  const [activeTab, setActiveTab] = useState('General');
 
   useEffect(() => {
     if (project) {

@@ -120,6 +120,53 @@ const TestCaseList = ({ project }) => {
     }
   };
 
+  const handleRenameTab = async () => {
+    if (!newTabName.trim() || newTabName === editingTab) {
+      setEditingTab(null);
+      return;
+    }
+
+    try {
+      // Update all test cases with the old tab name to the new tab name
+      const tabTestCases = testCases.filter(tc => tc.tab === editingTab);
+      
+      for (const tc of tabTestCases) {
+        await axios.put(`${API}/test-cases/${tc.id}`, { tab: newTabName });
+      }
+      
+      // Reload test cases and tabs
+      await loadTestCases();
+      await loadTabs();
+      setActiveTab(newTabName);
+      setEditingTab(null);
+      setNewTabName('');
+      toast.success('Tab renamed successfully!');
+    } catch (error) {
+      toast.error('Failed to rename tab');
+      console.error(error);
+    }
+  };
+
+  const handleDeleteTab = async () => {
+    try {
+      // Delete all test cases in this tab
+      const tabTestCases = testCases.filter(tc => tc.tab === deleteTab);
+      
+      for (const tc of tabTestCases) {
+        await axios.delete(`${API}/test-cases/${tc.id}`);
+      }
+      
+      // Reload
+      await loadTestCases();
+      await loadTabs();
+      setDeleteTab(null);
+      toast.success('Tab and all test cases deleted successfully!');
+    } catch (error) {
+      toast.error('Failed to delete tab');
+      console.error(error);
+    }
+  };
+
   const handleExport = async (format) => {
     try {
       const response = await axios.get(`${API}/test-cases/export/${format}/${project.id}`, {

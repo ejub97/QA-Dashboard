@@ -243,7 +243,7 @@ const TestCaseList = ({ project }) => {
         {filteredTestCases.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 mb-4">No test cases found</p>
-            <Button onClick={() => setShowForm(true)} className="btn-primary">
+            <Button onClick={() => setShowForm(true)} className="btn-dark">
               <Plus size={16} className="mr-2" />
               Create First Test Case
             </Button>

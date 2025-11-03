@@ -158,12 +158,12 @@ const Dashboard = () => {
                 {darkMode ? <Sun size={20} /> : <Moon size={20} />}
               </Button>
               <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
-              <DialogTrigger asChild>
-                <Button className="btn-dark" data-testid="create-project-btn">
-                  <Plus className="mr-2" size={18} />
-                  New Project
-                </Button>
-              </DialogTrigger>
+                <DialogTrigger asChild>
+                  <Button className="btn-dark" data-testid="create-project-btn">
+                    <Plus className="mr-2" size={18} />
+                    New Project
+                  </Button>
+                </DialogTrigger>
               <DialogContent data-testid="project-dialog">
                 <DialogHeader>
                   <DialogTitle>Create New Project</DialogTitle>

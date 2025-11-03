@@ -185,6 +185,7 @@ const Dashboard = () => {
               selectedProject={selectedProject}
               onSelectProject={setSelectedProject}
               onCopyInvite={copyInviteLink}
+              onDeleteProject={deleteProject}
             />
           </div>
 

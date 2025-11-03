@@ -1,7 +1,19 @@
 import { Button } from '@/components/ui/button';
-import { Link as LinkIcon, FolderOpen } from 'lucide-react';
+import { Link as LinkIcon, FolderOpen, Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useState } from 'react';
 
-const ProjectList = ({ projects, selectedProject, onSelectProject, onCopyInvite }) => {
+const ProjectList = ({ projects, selectedProject, onSelectProject, onCopyInvite, onDeleteProject }) => {
+  const [deleteProject, setDeleteProject] = useState(null);
   return (
     <div className="glass-effect rounded-2xl p-4">
       <h2 className="text-lg font-semibold text-gray-900 mb-4" data-testid="projects-heading">Projects</h2>

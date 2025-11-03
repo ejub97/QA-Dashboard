@@ -21,7 +21,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 import pandas as pd
 
 
-ROOT_DIR = Path(__file__).nparent
+ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection

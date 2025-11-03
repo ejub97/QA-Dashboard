@@ -340,6 +340,9 @@ async def export_excel(project_id: str):
     header_font = Font(bold=True, color="FFFFFF")
     header_alignment = Alignment(horizontal="center", vertical="center")
     
+    # Define data cell alignment with wrap text
+    data_alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    
     # Create a sheet for each tab
     global_counter = 1
     for tab_name in sorted(tabs_dict.keys()):
@@ -361,17 +364,31 @@ async def export_excel(project_id: str):
         for tc in tabs_dict[tab_name]:
             tc_id = f"TC{str(global_counter).zfill(3)}"
             global_counter += 1
-            ws.append([
+            
+            # Format steps to ensure each step is on a new line
+            steps = tc.get('steps', '')
+            
+            row_data = [
                 tc_id,
                 tc.get('title', ''),
                 tc.get('description', ''),
                 tc.get('priority', ''),
                 tc.get('type', ''),
-                tc.get('steps', ''),
+                steps,
                 tc.get('expected_result', ''),
                 tc.get('actual_result', ''),
                 tc.get('status', '')
-            ])
+            ]
+            ws.append(row_data)
+            
+            # Apply wrap text and alignment to data cells
+            current_row = ws.max_row
+            for cell in ws[current_row]:
+                cell.alignment = data_alignment
+        
+        # Set row heights to auto
+        for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+            ws.row_dimensions[row[0].row].height = None  # Auto height
         
         # Adjust column widths
         ws.column_dimensions['A'].width = 10
@@ -379,9 +396,9 @@ async def export_excel(project_id: str):
         ws.column_dimensions['C'].width = 30
         ws.column_dimensions['D'].width = 12
         ws.column_dimensions['E'].width = 15
-        ws.column_dimensions['F'].width = 30
-        ws.column_dimensions['G'].width = 30
-        ws.column_dimensions['H'].width = 30
+        ws.column_dimensions['F'].width = 35
+        ws.column_dimensions['G'].width = 35
+        ws.column_dimensions['H'].width = 35
         ws.column_dimensions['I'].width = 12
     
     # If no test cases, create a default sheet

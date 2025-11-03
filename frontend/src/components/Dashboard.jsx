@@ -204,6 +204,7 @@ const Dashboard = () => {
                 </form>
               </DialogContent>
             </Dialog>
+            </div>
           </div>
         </div>
 

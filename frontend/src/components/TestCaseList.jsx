@@ -37,8 +37,21 @@ const TestCaseList = ({ project }) => {
   useEffect(() => {
     if (project) {
       loadTestCases();
+      loadTabs();
     }
   }, [project]);
+
+  const loadTabs = async () => {
+    try {
+      const response = await axios.get(`${API}/projects/${project.id}/tabs`);
+      if (response.data.tabs && response.data.tabs.length > 0) {
+        setTabs(response.data.tabs);
+        setActiveTab(response.data.tabs[0]);
+      }
+    } catch (error) {
+      console.error('Failed to load tabs', error);
+    }
+  };
 
   const loadTestCases = async () => {
     try {

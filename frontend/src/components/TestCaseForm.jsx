@@ -5,8 +5,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const TestCaseForm = ({ testCase, onSubmit, onCancel }) => {
+const TestCaseForm = ({ testCase, onSubmit, onCancel, currentTab }) => {
   const [formData, setFormData] = useState({
+    tab: currentTab || 'General',
     title: '',
     description: '',
     priority: 'medium',
@@ -19,6 +20,7 @@ const TestCaseForm = ({ testCase, onSubmit, onCancel }) => {
   useEffect(() => {
     if (testCase) {
       setFormData({
+        tab: testCase.tab || 'General',
         title: testCase.title || '',
         description: testCase.description || '',
         priority: testCase.priority || 'medium',
@@ -27,8 +29,10 @@ const TestCaseForm = ({ testCase, onSubmit, onCancel }) => {
         expected_result: testCase.expected_result || '',
         actual_result: testCase.actual_result || '',
       });
+    } else if (currentTab) {
+      setFormData(prev => ({ ...prev, tab: currentTab }));
     }
-  }, [testCase]);
+  }, [testCase, currentTab]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -41,6 +45,20 @@ const TestCaseForm = ({ testCase, onSubmit, onCancel }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label htmlFor="tab">Tab/Section *</Label>
+        <Input
+          id="tab"
+          data-testid="testcase-tab-input"
+          placeholder="Enter tab name (e.g., Registration, Login)"
+          value={formData.tab}
+          onChange={(e) => handleChange('tab', e.target.value)}
+          className="input-focus"
+          required
+        />
+        <p className="text-xs text-gray-500 mt-1">Group test cases by feature or module</p>
+      </div>
+
       <div>
         <Label htmlFor="title">Title *</Label>
         <Input

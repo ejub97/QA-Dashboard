@@ -16,6 +16,8 @@ from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import secrets
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 
 
 ROOT_DIR = Path(__file__).parent
@@ -52,6 +54,7 @@ class TestCase(BaseModel):
     
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     project_id: str
+    tab: str = "General"  # Tab/Section name
     title: str
     description: str
     priority: str  # low, medium, high
@@ -65,6 +68,7 @@ class TestCase(BaseModel):
 
 class TestCaseCreate(BaseModel):
     project_id: str
+    tab: Optional[str] = "General"
     title: str
     description: str
     priority: str
@@ -74,6 +78,7 @@ class TestCaseCreate(BaseModel):
     actual_result: Optional[str] = ""
 
 class TestCaseUpdate(BaseModel):
+    tab: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
     priority: Optional[str] = None
@@ -146,6 +151,15 @@ async def delete_project(project_id: str):
     
     return {"message": "Project and associated test cases deleted successfully"}
 
+@api_router.get("/projects/{project_id}/tabs")
+async def get_project_tabs(project_id: str):
+    """Get unique tabs for a project"""
+    test_cases = await db.test_cases.find({"project_id": project_id}, {"_id": 0, "tab": 1}).to_list(1000)
+    tabs = list(set([tc.get('tab', 'General') for tc in test_cases]))
+    if not tabs:
+        tabs = ["General"]
+    return {"tabs": sorted(tabs)}
+
 
 # Test Case Routes
 @api_router.post("/test-cases", response_model=TestCase)
@@ -166,10 +180,12 @@ async def create_test_case(input: TestCaseCreate):
     return test_case_obj
 
 @api_router.get("/test-cases", response_model=List[TestCase])
-async def get_test_cases(project_id: Optional[str] = None):
+async def get_test_cases(project_id: Optional[str] = None, tab: Optional[str] = None):
     query = {}
     if project_id:
         query["project_id"] = project_id
+    if tab:
+        query["tab"] = tab
     
     test_cases = await db.test_cases.find(query, {"_id": 0}).to_list(1000)
     
@@ -258,19 +274,23 @@ async def export_csv(project_id: str):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Get test cases
+    # Get test cases sorted by tab and created_at
     test_cases = await db.test_cases.find({"project_id": project_id}, {"_id": 0}).to_list(1000)
+    test_cases.sort(key=lambda x: (x.get('tab', 'General'), x.get('created_at', '')))
     
     # Create CSV in memory
     output = io.StringIO()
     writer = csv.writer(output)
     
     # Write header
-    writer.writerow(['Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status'])
+    writer.writerow(['TC ID', 'Tab', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status'])
     
-    # Write data
-    for tc in test_cases:
+    # Write data with TC ID
+    for idx, tc in enumerate(test_cases, start=1):
+        tc_id = f"TC{str(idx).zfill(3)}"
         writer.writerow([
+            tc_id,
+            tc.get('tab', 'General'),
             tc.get('title', ''),
             tc.get('description', ''),
             tc.get('priority', ''),
@@ -289,8 +309,8 @@ async def export_csv(project_id: str):
         headers={"Content-Disposition": f"attachment; filename={project['name']}_test_cases.csv"}
     )
 
-@api_router.get("/test-cases/export/docx/{project_id}")
-async def export_docx(project_id: str):
+@api_router.get("/test-cases/export/excel/{project_id}")
+async def export_excel(project_id: str):
     # Get project
     project = await db.projects.find_one({"id": project_id})
     if not project:
@@ -298,6 +318,103 @@ async def export_docx(project_id: str):
     
     # Get test cases
     test_cases = await db.test_cases.find({"project_id": project_id}, {"_id": 0}).to_list(1000)
+    
+    # Group test cases by tab
+    tabs_dict = {}
+    for tc in test_cases:
+        tab = tc.get('tab', 'General')
+        if tab not in tabs_dict:
+            tabs_dict[tab] = []
+        tabs_dict[tab].append(tc)
+    
+    # Sort test cases within each tab by created_at
+    for tab in tabs_dict:
+        tabs_dict[tab].sort(key=lambda x: x.get('created_at', ''))
+    
+    # Create Excel workbook
+    wb = Workbook()
+    wb.remove(wb.active)  # Remove default sheet
+    
+    # Define header style
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Create a sheet for each tab
+    global_counter = 1
+    for tab_name in sorted(tabs_dict.keys()):
+        # Sanitize sheet name (Excel has limitations)
+        safe_sheet_name = tab_name[:31].replace('/', '-').replace('\\', '-').replace('*', '').replace('?', '').replace('[', '').replace(']', '')
+        ws = wb.create_sheet(title=safe_sheet_name)
+        
+        # Write headers
+        headers = ['TC ID', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status']
+        ws.append(headers)
+        
+        # Style header row
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+        
+        # Write data
+        for tc in tabs_dict[tab_name]:
+            tc_id = f"TC{str(global_counter).zfill(3)}"
+            global_counter += 1
+            ws.append([
+                tc_id,
+                tc.get('title', ''),
+                tc.get('description', ''),
+                tc.get('priority', ''),
+                tc.get('type', ''),
+                tc.get('steps', ''),
+                tc.get('expected_result', ''),
+                tc.get('actual_result', ''),
+                tc.get('status', '')
+            ])
+        
+        # Adjust column widths
+        ws.column_dimensions['A'].width = 10
+        ws.column_dimensions['B'].width = 25
+        ws.column_dimensions['C'].width = 30
+        ws.column_dimensions['D'].width = 12
+        ws.column_dimensions['E'].width = 15
+        ws.column_dimensions['F'].width = 30
+        ws.column_dimensions['G'].width = 30
+        ws.column_dimensions['H'].width = 30
+        ws.column_dimensions['I'].width = 12
+    
+    # If no test cases, create a default sheet
+    if not tabs_dict:
+        ws = wb.create_sheet(title="General")
+        headers = ['TC ID', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status']
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+    
+    # Save to memory
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={project['name']}_test_cases.xlsx"}
+    )
+
+@api_router.get("/test-cases/export/docx/{project_id}")
+async def export_docx(project_id: str):
+    # Get project
+    project = await db.projects.find_one({"id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get test cases sorted by tab
+    test_cases = await db.test_cases.find({"project_id": project_id}, {"_id": 0}).to_list(1000)
+    test_cases.sort(key=lambda x: (x.get('tab', 'General'), x.get('created_at', '')))
     
     # Create Word document
     doc = Document()
@@ -307,12 +424,12 @@ async def export_docx(project_id: str):
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     # Add table
-    table = doc.add_table(rows=1, cols=8)
+    table = doc.add_table(rows=1, cols=9)
     table.style = 'Light Grid Accent 1'
     
     # Header row
     hdr_cells = table.rows[0].cells
-    headers = ['Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status']
+    headers = ['TC ID', 'Tab', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result']
     for i, header in enumerate(headers):
         hdr_cells[i].text = header
         for paragraph in hdr_cells[i].paragraphs:
@@ -320,16 +437,18 @@ async def export_docx(project_id: str):
                 run.font.bold = True
     
     # Data rows
-    for tc in test_cases:
+    for idx, tc in enumerate(test_cases, start=1):
+        tc_id = f"TC{str(idx).zfill(3)}"
         row_cells = table.add_row().cells
-        row_cells[0].text = tc.get('title', '')
-        row_cells[1].text = tc.get('description', '')
-        row_cells[2].text = tc.get('priority', '')
-        row_cells[3].text = tc.get('type', '')
-        row_cells[4].text = tc.get('steps', '')
-        row_cells[5].text = tc.get('expected_result', '')
-        row_cells[6].text = tc.get('actual_result', '')
-        row_cells[7].text = tc.get('status', '')
+        row_cells[0].text = tc_id
+        row_cells[1].text = tc.get('tab', 'General')
+        row_cells[2].text = tc.get('title', '')
+        row_cells[3].text = tc.get('description', '')
+        row_cells[4].text = tc.get('priority', '')
+        row_cells[5].text = tc.get('type', '')
+        row_cells[6].text = tc.get('steps', '')
+        row_cells[7].text = tc.get('expected_result', '')
+        row_cells[8].text = tc.get('actual_result', '')
     
     # Save to memory
     output = io.BytesIO()

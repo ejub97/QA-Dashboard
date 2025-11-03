@@ -88,6 +88,24 @@ const Dashboard = () => {
     toast.success('Invite link copied to clipboard!');
   };
 
+  const deleteProject = async (project) => {
+    try {
+      await axios.delete(`${API}/projects/${project.id}`);
+      const updatedProjects = projects.filter(p => p.id !== project.id);
+      setProjects(updatedProjects);
+      
+      // If deleted project was selected, select another or clear
+      if (selectedProject?.id === project.id) {
+        setSelectedProject(updatedProjects.length > 0 ? updatedProjects[0] : null);
+      }
+      
+      toast.success('Project deleted successfully!');
+    } catch (error) {
+      toast.error('Failed to delete project');
+      console.error(error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">

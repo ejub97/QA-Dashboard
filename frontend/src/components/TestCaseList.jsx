@@ -316,8 +316,8 @@ const TestCaseList = ({ project }) => {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="flex items-center gap-2 mb-4">
-          <TabsList className="flex-1">
+        <div className="flex items-start gap-2 mb-4">
+          <TabsList className="justify-start">
             {tabs.map((tab) => (
               <TabsTrigger key={tab} value={tab} data-testid={`tab-${tab}`} className="relative group">
                 {tab} ({testCases.filter(tc => tc.tab === tab).length})

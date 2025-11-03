@@ -45,23 +45,62 @@ const ProjectList = ({ projects, selectedProject, onSelectProject, onCopyInvite,
                   )}
                 </div>
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="w-full mt-2 text-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCopyInvite(project);
-                }}
-                data-testid={`copy-invite-btn-${project.id}`}
-              >
-                <LinkIcon size={12} className="mr-1" />
-                Copy Invite Link
-              </Button>
+              <div className="flex gap-1 mt-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="flex-1 text-xs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCopyInvite(project);
+                  }}
+                  data-testid={`copy-invite-btn-${project.id}`}
+                >
+                  <LinkIcon size={12} className="mr-1" />
+                  Copy Invite
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteProject(project);
+                  }}
+                  data-testid={`delete-project-btn-${project.id}`}
+                >
+                  <Trash2 size={12} />
+                </Button>
+              </div>
             </div>
           ))
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteProject} onOpenChange={() => setDeleteProject(null)}>
+        <AlertDialogContent data-testid="delete-project-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deleteProject?.name}"? This will also delete all associated test cases. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="cancel-delete-project-btn">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                onDeleteProject(deleteProject);
+                setDeleteProject(null);
+              }} 
+              className="bg-red-600 hover:bg-red-700" 
+              data-testid="confirm-delete-project-btn"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

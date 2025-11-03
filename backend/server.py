@@ -463,7 +463,11 @@ async def export_docx(project_id: str):
         row_cells[3].text = tc.get('description', '')
         row_cells[4].text = tc.get('priority', '')
         row_cells[5].text = tc.get('type', '')
-        row_cells[6].text = tc.get('steps', '')
+        
+        # Format steps to ensure each step is on a new line
+        steps = tc.get('steps', '')
+        row_cells[6].text = steps
+        
         row_cells[7].text = tc.get('expected_result', '')
         row_cells[8].text = tc.get('actual_result', '')
     

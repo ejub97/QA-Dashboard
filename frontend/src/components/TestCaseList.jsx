@@ -231,14 +231,14 @@ const TestCaseList = ({ project }) => {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
-            onClick={() => handleExport('csv')}
+            onClick={() => handleExport('docx')}
             variant="outline"
             size="sm"
             className="btn-secondary"
-            data-testid="export-csv-btn"
+            data-testid="export-docx-btn"
           >
-            <FileSpreadsheet size={16} className="mr-2" />
-            Export CSV
+            <FileText size={16} className="mr-2" />
+            Export Word
           </Button>
           <Button
             onClick={() => handleExport('excel')}
@@ -247,7 +247,7 @@ const TestCaseList = ({ project }) => {
             className="btn-secondary"
             data-testid="export-excel-btn"
           >
-            <FileText size={16} className="mr-2" />
+            <FileSpreadsheet size={16} className="mr-2" />
             Export Excel
           </Button>
           <Button

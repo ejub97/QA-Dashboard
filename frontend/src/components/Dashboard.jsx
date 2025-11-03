@@ -147,7 +147,17 @@ const Dashboard = () => {
               </h1>
               <p className="text-gray-600">Manage your test cases efficiently</p>
             </div>
-            <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={toggleDarkMode}
+                data-testid="dark-mode-toggle"
+                className="btn-secondary"
+              >
+                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </Button>
+              <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
               <DialogTrigger asChild>
                 <Button className="btn-dark" data-testid="create-project-btn">
                   <Plus className="mr-2" size={18} />

@@ -167,7 +167,7 @@ const Dashboard = () => {
                     <Button type="button" variant="outline" onClick={() => setShowProjectDialog(false)} data-testid="cancel-project-btn">
                       Cancel
                     </Button>
-                    <Button type="submit" className="btn-primary" data-testid="submit-project-btn">
+                    <Button type="submit" className="btn-dark" data-testid="submit-project-btn">
                       Create Project
                     </Button>
                   </div>

@@ -84,6 +84,18 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 }
 
+.btn-dark {
+  background: #222831;
+  color: white;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-dark:hover {
+  background: #393E46;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(34, 40, 49, 0.4);
+}
+
 .btn-secondary {
   background: white;
   color: #1f2937;

@@ -70,6 +70,7 @@ const TestCaseList = ({ project }) => {
       const response = await axios.post(`${API}/test-cases`, { ...data, project_id: project.id });
       setTestCases([...testCases, response.data]);
       setShowForm(false);
+      await loadTabs();
       toast.success('Test case created successfully!');
     } catch (error) {
       toast.error('Failed to create test case');

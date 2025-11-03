@@ -33,6 +33,9 @@ const TestCaseList = ({ project }) => {
   const [filterType, setFilterType] = useState('all');
   const [tabs, setTabs] = useState(['General']);
   const [activeTab, setActiveTab] = useState('General');
+  const [editingTab, setEditingTab] = useState(null);
+  const [newTabName, setNewTabName] = useState('');
+  const [deleteTab, setDeleteTab] = useState(null);
 
   useEffect(() => {
     if (project) {

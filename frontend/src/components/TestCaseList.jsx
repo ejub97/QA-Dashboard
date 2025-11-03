@@ -499,6 +499,54 @@ const TestCaseList = ({ project }) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Rename Tab Dialog */}
+      <Dialog open={!!editingTab} onOpenChange={() => setEditingTab(null)}>
+        <DialogContent data-testid="rename-tab-dialog">
+          <DialogHeader>
+            <DialogTitle>Rename Tab</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="new-tab-name">New Tab Name</Label>
+              <Input
+                id="new-tab-name"
+                data-testid="new-tab-name-input"
+                value={newTabName}
+                onChange={(e) => setNewTabName(e.target.value)}
+                placeholder="Enter new tab name"
+                className="input-focus"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditingTab(null)} data-testid="cancel-rename-tab-btn">
+                Cancel
+              </Button>
+              <Button onClick={handleRenameTab} className="btn-dark" data-testid="confirm-rename-tab-btn">
+                Rename
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Tab Confirmation Dialog */}
+      <AlertDialog open={!!deleteTab} onOpenChange={() => setDeleteTab(null)}>
+        <AlertDialogContent data-testid="delete-tab-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Tab</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the "{deleteTab}" tab? This will delete all test cases ({testCases.filter(tc => tc.tab === deleteTab).length}) in this tab. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="cancel-delete-tab-btn">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTab} className="bg-red-600 hover:bg-red-700" data-testid="confirm-delete-tab-btn">
+              Delete Tab
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

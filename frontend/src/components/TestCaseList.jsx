@@ -314,13 +314,40 @@ const TestCaseList = ({ project }) => {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="mb-4">
-          {tabs.map((tab) => (
-            <TabsTrigger key={tab} value={tab} data-testid={`tab-${tab}`}>
-              {tab} ({testCases.filter(tc => tc.tab === tab).length})
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="flex items-center gap-2 mb-4">
+          <TabsList className="flex-1">
+            {tabs.map((tab) => (
+              <TabsTrigger key={tab} value={tab} data-testid={`tab-${tab}`} className="relative group">
+                {tab} ({testCases.filter(tc => tc.tab === tab).length})
+                <div className="absolute -top-1 -right-1 hidden group-hover:flex gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingTab(tab);
+                      setNewTabName(tab);
+                    }}
+                    className="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-1"
+                    data-testid={`rename-tab-btn-${tab}`}
+                  >
+                    <Edit2 size={10} />
+                  </button>
+                  {tabs.length > 1 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTab(tab);
+                      }}
+                      className="bg-red-500 hover:bg-red-600 text-white rounded-full p-1"
+                      data-testid={`delete-tab-btn-${tab}`}
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
+                </div>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
         {tabs.map((tab) => (
           <TabsContent key={tab} value={tab} className="mt-0">

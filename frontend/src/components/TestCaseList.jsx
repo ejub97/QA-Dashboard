@@ -84,6 +84,7 @@ const TestCaseList = ({ project }) => {
       setTestCases(testCases.map((tc) => (tc.id === editingTestCase.id ? response.data : tc)));
       setEditingTestCase(null);
       setShowForm(false);
+      await loadTabs();
       toast.success('Test case updated successfully!');
     } catch (error) {
       toast.error('Failed to update test case');

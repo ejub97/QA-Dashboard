@@ -14,6 +14,35 @@ const ProjectList = ({ projects, selectedProject, onSelectProject, onDeleteProje
     return member?.role || null;
   };
 
+  const handleStartEdit = (project, e) => {
+    e.stopPropagation();
+    setEditingProject(project.id);
+    setEditName(project.name);
+    setEditDescription(project.description || '');
+  };
+
+  const handleCancelEdit = (e) => {
+    e.stopPropagation();
+    setEditingProject(null);
+    setEditName('');
+    setEditDescription('');
+  };
+
+  const handleSaveEdit = async (projectId, e) => {
+    e.stopPropagation();
+    if (editName.trim()) {
+      await onRenameProject(projectId, editName, editDescription);
+      setEditingProject(null);
+    }
+  };
+
+  const handleDelete = (projectId, e) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this project? All test cases will be deleted.')) {
+      onDeleteProject(projectId);
+    }
+  };
+
   return (
     <div className="glass-effect rounded-2xl p-4">
       <h2 className="text-lg font-semibold text-gray-900 mb-4" data-testid="projects-heading">Projects</h2>

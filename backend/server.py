@@ -575,12 +575,12 @@ async def create_test_case(
         await conn.execute(
             '''INSERT INTO test_cases (
                 id, project_id, tab_section, title, description, priority, type,
-                steps, expected_result, actual_result, status, created_by, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)''',
+                steps, expected_result, actual_result, status, created_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)''',
             tc_id, test_case_data.project_id, test_case_data.tab_section or "General",
             test_case_data.title, test_case_data.description, test_case_data.priority,
             test_case_data.type, test_case_data.steps, test_case_data.expected_result,
-            test_case_data.actual_result or "", "draft", current_user['id'], now, now
+            test_case_data.actual_result or "", "draft", current_user['id']
         )
         
         return TestCase(

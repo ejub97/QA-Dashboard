@@ -569,7 +569,6 @@ async def create_test_case(
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         tc_id = str(uuid.uuid4())
-        now = CURRENT_TIMESTAMP
         
         await conn.execute(
             '''INSERT INTO test_cases (

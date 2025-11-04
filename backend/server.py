@@ -162,6 +162,13 @@ class CommentCreate(BaseModel):
     test_case_id: str
     text: str
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
 
 # ============ AUTH DEPENDENCIES ============
 

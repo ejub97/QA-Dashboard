@@ -223,8 +223,8 @@ const Dashboard = () => {
               projects={projects}
               selectedProject={selectedProject}
               onSelectProject={setSelectedProject}
-              onCopyInvite={copyInviteLink}
               onDeleteProject={deleteProject}
+              user={user}
             />
           </div>
 

@@ -804,10 +804,10 @@ const TestCaseList = ({ project }) => {
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label>Select CSV or Excel file</Label>
+                <Label>Select Excel or Word file</Label>
                 <Input
                   type="file"
-                  accept=".csv,.xlsx,.xls"
+                  accept=".xlsx,.xls,.docx"
                   onChange={(e) => setImportFile(e.target.files[0])}
                   data-testid="import-file-input"
                 />

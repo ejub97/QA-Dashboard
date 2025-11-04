@@ -219,33 +219,7 @@ class QADashboardPostgreSQLTester:
             return True
         return False
 
-    def test_get_project_by_id(self):
-        """Test getting project by ID"""
-        if not self.project_id:
-            print("❌ Skipping - No project ID available")
-            return False
-        
-        success, response = self.run_test(
-            "Get Project by ID",
-            "GET",
-            f"projects/{self.project_id}",
-            200
-        )
-        return success and response.get('id') == self.project_id
-
-    def test_get_project_by_invite(self):
-        """Test getting project by invite code"""
-        if not self.invite_code:
-            print("❌ Skipping - No invite code available")
-            return False
-        
-        success, response = self.run_test(
-            "Get Project by Invite Code",
-            "GET",
-            f"projects/invite/{self.invite_code}",
-            200
-        )
-        return success and response.get('invite_code') == self.invite_code
+    # Removed old project test methods - using PostgreSQL-specific tests
 
     def test_create_test_case(self):
         """Test test case creation in PostgreSQL"""

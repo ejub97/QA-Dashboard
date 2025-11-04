@@ -27,7 +27,7 @@ import {
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-const TestCaseList = ({ project }) => {
+const TestCaseList = ({ project, userRole }) => {
   const [testCases, setTestCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -50,6 +50,10 @@ const TestCaseList = ({ project }) => {
   const [showComments, setShowComments] = useState(null);
   const [commentText, setCommentText] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Role-based permissions
+  const canEdit = userRole === 'owner' || userRole === 'editor' || userRole === 'admin';
+  const canView = true; // Everyone can view
 
   useEffect(() => {
     if (project) {

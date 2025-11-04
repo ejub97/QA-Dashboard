@@ -527,3 +527,366 @@ async def delete_tab(
         return {"message": "Tab deleted successfully", "tabs": tabs}
 
 # ============ TEST CASE ENDPOINTS ============
+
+@api_router.get("/testcases/{project_id}", response_model=List[TestCase])
+async def get_test_cases(
+    project_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        test_cases = await conn.fetch(
+            'SELECT * FROM test_cases WHERE project_id = $1 ORDER BY created_at DESC',
+            project_id
+        )
+        
+        return [
+            TestCase(
+                id=tc['id'],
+                project_id=tc['project_id'],
+                tab_section=tc['tab_section'],
+                title=tc['title'],
+                description=tc['description'],
+                priority=tc['priority'],
+                type=tc['type'],
+                steps=tc['steps'],
+                expected_result=tc['expected_result'],
+                actual_result=tc['actual_result'] or "",
+                status=tc['status'],
+                created_by=tc['created_by'],
+                created_at=tc['created_at'],
+                updated_at=tc['updated_at']
+            )
+            for tc in test_cases
+        ]
+
+@api_router.post("/testcases", response_model=TestCase)
+async def create_test_case(
+    test_case_data: TestCaseCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        tc_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+        
+        await conn.execute(
+            '''INSERT INTO test_cases (
+                id, project_id, tab_section, title, description, priority, type,
+                steps, expected_result, actual_result, status, created_by, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)''',
+            tc_id, test_case_data.project_id, test_case_data.tab_section or "General",
+            test_case_data.title, test_case_data.description, test_case_data.priority,
+            test_case_data.type, test_case_data.steps, test_case_data.expected_result,
+            test_case_data.actual_result or "", "draft", current_user['id'], now, now
+        )
+        
+        return TestCase(
+            id=tc_id,
+            project_id=test_case_data.project_id,
+            tab_section=test_case_data.tab_section or "General",
+            title=test_case_data.title,
+            description=test_case_data.description,
+            priority=test_case_data.priority,
+            type=test_case_data.type,
+            steps=test_case_data.steps,
+            expected_result=test_case_data.expected_result,
+            actual_result=test_case_data.actual_result or "",
+            status="draft",
+            created_by=current_user['id'],
+            created_at=now,
+            updated_at=now
+        )
+
+@api_router.put("/testcases/{test_case_id}", response_model=TestCase)
+async def update_test_case(
+    test_case_id: str,
+    test_case_data: TestCaseUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        # Get existing test case
+        existing = await conn.fetchrow(
+            'SELECT * FROM test_cases WHERE id = $1',
+            test_case_id
+        )
+        
+        if not existing:
+            raise HTTPException(status_code=404, detail="Test case not found")
+        
+        # Build update query dynamically
+        update_fields = []
+        values = []
+        param_count = 1
+        
+        for field, value in test_case_data.dict(exclude_unset=True).items():
+            if value is not None:
+                update_fields.append(f"{field} = ${param_count}")
+                values.append(value)
+                param_count += 1
+        
+        if update_fields:
+            update_fields.append(f"updated_at = ${param_count}")
+            values.append(datetime.now(timezone.utc))
+            values.append(test_case_id)
+            
+            query = f"UPDATE test_cases SET {', '.join(update_fields)} WHERE id = ${param_count + 1}"
+            await conn.execute(query, *values)
+        
+        # Fetch updated test case
+        updated = await conn.fetchrow('SELECT * FROM test_cases WHERE id = $1', test_case_id)
+        
+        return TestCase(
+            id=updated['id'],
+            project_id=updated['project_id'],
+            tab_section=updated['tab_section'],
+            title=updated['title'],
+            description=updated['description'],
+            priority=updated['priority'],
+            type=updated['type'],
+            steps=updated['steps'],
+            expected_result=updated['expected_result'],
+            actual_result=updated['actual_result'] or "",
+            status=updated['status'],
+            created_by=updated['created_by'],
+            created_at=updated['created_at'],
+            updated_at=updated['updated_at']
+        )
+
+@api_router.delete("/testcases/{test_case_id}")
+async def delete_test_case(
+    test_case_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute('DELETE FROM test_cases WHERE id = $1', test_case_id)
+        
+        if result == "DELETE 0":
+            raise HTTPException(status_code=404, detail="Test case not found")
+        
+        return {"message": "Test case deleted successfully"}
+
+# ============ EXPORT ENDPOINTS ============
+
+def format_steps(steps_text):
+    """Format steps with numbers for export"""
+    if not steps_text:
+        return []
+    
+    lines = steps_text.split('\n')
+    formatted_steps = []
+    for i, line in enumerate(lines, 1):
+        line = line.strip()
+        if line:
+            if not line[0].isdigit():
+                formatted_steps.append(f"{i}. {line}")
+            else:
+                formatted_steps.append(line)
+    return formatted_steps
+
+@api_router.get("/export/word/{project_id}")
+async def export_to_word(project_id: str, current_user: dict = Depends(get_current_user)):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        # Get project
+        project = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get test cases
+        test_cases = await conn.fetch(
+            'SELECT * FROM test_cases WHERE project_id = $1 ORDER BY created_at',
+            project_id
+        )
+        
+        if not test_cases:
+            raise HTTPException(status_code=404, detail="No test cases found")
+        
+        # Create Word document
+        doc = Document()
+        doc.add_heading(f"Test Cases - {project['name']}", 0)
+        
+        for idx, tc in enumerate(test_cases, 1):
+            doc.add_heading(f"TC{idx:03d}: {tc['title']}", level=1)
+            
+            table = doc.add_table(rows=8, cols=2)
+            table.style = 'Table Grid'
+            
+            table.rows[0].cells[0].text = "TC ID"
+            table.rows[0].cells[1].text = f"TC{idx:03d}"
+            
+            table.rows[1].cells[0].text = "Title"
+            table.rows[1].cells[1].text = tc['title']
+            
+            table.rows[2].cells[0].text = "Description"
+            table.rows[2].cells[1].text = tc['description']
+            
+            table.rows[3].cells[0].text = "Priority"
+            table.rows[3].cells[1].text = tc['priority']
+            
+            table.rows[4].cells[0].text = "Type"
+            table.rows[4].cells[1].text = tc['type']
+            
+            table.rows[5].cells[0].text = "Steps"
+            formatted_steps = format_steps(tc['steps'])
+            table.rows[5].cells[1].text = '\n'.join(formatted_steps)
+            
+            table.rows[6].cells[0].text = "Expected Result"
+            table.rows[6].cells[1].text = tc['expected_result']
+            
+            table.rows[7].cells[0].text = "Actual Result"
+            table.rows[7].cells[1].text = tc['actual_result'] or ""
+            
+            doc.add_paragraph()
+        
+        # Save to bytes
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f"attachment; filename=test_cases_{project['name']}.docx"}
+        )
+
+@api_router.get("/export/excel/{project_id}")
+async def export_to_excel(project_id: str, current_user: dict = Depends(get_current_user)):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        # Get project
+        project = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        tabs = json.loads(project['tabs']) if isinstance(project['tabs'], str) else project['tabs']
+        
+        # Get test cases
+        test_cases = await conn.fetch(
+            'SELECT * FROM test_cases WHERE project_id = $1 ORDER BY created_at',
+            project_id
+        )
+        
+        if not test_cases:
+            raise HTTPException(status_code=404, detail="No test cases found")
+        
+        # Create Excel workbook
+        wb = Workbook()
+        wb.remove(wb.active)
+        
+        # Group test cases by tab
+        test_cases_by_tab = {}
+        for tc in test_cases:
+            tab = tc['tab_section'] or 'General'
+            if tab not in test_cases_by_tab:
+                test_cases_by_tab[tab] = []
+            test_cases_by_tab[tab].append(tc)
+        
+        # Create a sheet for each tab
+        tc_counter = 1
+        for tab_name in tabs:
+            if tab_name not in test_cases_by_tab:
+                continue
+            
+            ws = wb.create_sheet(title=tab_name[:31])
+            
+            # Header row
+            headers = ["TC ID", "Title", "Description", "Priority", "Type", "Steps", 
+                      "Expected Result", "Actual Result", "Status"]
+            ws.append(headers)
+            
+            # Style header
+            for cell in ws[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            # Data rows
+            for tc in test_cases_by_tab[tab_name]:
+                formatted_steps = '\n'.join(format_steps(tc['steps']))
+                
+                ws.append([
+                    f"TC{tc_counter:03d}",
+                    tc['title'],
+                    tc['description'],
+                    tc['priority'],
+                    tc['type'],
+                    formatted_steps,
+                    tc['expected_result'],
+                    tc['actual_result'] or "",
+                    tc['status']
+                ])
+                tc_counter += 1
+            
+            # Auto-adjust column widths
+            for column in ws.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(cell.value)
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)
+                ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Save to bytes
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=test_cases_{project['name']}.xlsx"}
+        )
+
+# ============ STATISTICS ENDPOINT ============
+
+@api_router.get("/statistics", response_model=Statistics)
+async def get_statistics(current_user: dict = Depends(get_current_user)):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        # Get counts
+        total_projects = await conn.fetchval('SELECT COUNT(*) FROM projects')
+        total_test_cases = await conn.fetchval('SELECT COUNT(*) FROM test_cases')
+        draft_count = await conn.fetchval("SELECT COUNT(*) FROM test_cases WHERE status = 'draft'")
+        success_count = await conn.fetchval("SELECT COUNT(*) FROM test_cases WHERE status = 'success'")
+        fail_count = await conn.fetchval("SELECT COUNT(*) FROM test_cases WHERE status = 'fail'")
+        
+        return Statistics(
+            total_projects=total_projects or 0,
+            total_test_cases=total_test_cases or 0,
+            draft_count=draft_count or 0,
+            success_count=success_count or 0,
+            fail_count=fail_count or 0
+        )
+
+# ============ CORS & APP SETUP ============
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(api_router)
+
+@app.get("/")
+async def root():
+    return {"message": "QA Dashboard API with PostgreSQL - Running"}
+
+@app.get("/health")
+async def health_check():
+    try:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            await conn.fetchval('SELECT 1')
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}

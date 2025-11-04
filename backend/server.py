@@ -398,13 +398,16 @@ async def create_project(
             current_user['id'], json.dumps(["General"])
         )
         
+        # Fetch the created project to get the actual timestamps
+        created_project = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
+        
         return Project(
             id=project_id,
             name=project_data.name,
             description=project_data.description or "",
             created_by=current_user['id'],
-            created_at=now,
-            updated_at=now,
+            created_at=created_project['created_at'],
+            updated_at=created_project['updated_at'],
             tabs=["General"]
         )
 

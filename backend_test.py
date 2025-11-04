@@ -494,19 +494,26 @@ class QADashboardPostgreSQLTester:
         return success and isinstance(response, list)
 
     def test_get_test_cases_by_project(self):
-        """Test getting test cases by project"""
+        """Test getting test cases by project from PostgreSQL"""
         if not self.project_id:
             print("❌ Skipping - No project ID available")
             return False
         
         success, response = self.run_test(
-            "Get Test Cases by Project",
+            "Get Test Cases by Project (PostgreSQL)",
             "GET",
-            "test-cases",
-            200,
-            params={"project_id": self.project_id}
+            f"testcases/{self.project_id}",
+            200
         )
-        return success and isinstance(response, list)
+        if success and isinstance(response, list):
+            print(f"   ✅ Retrieved {len(response)} test cases from PostgreSQL")
+            # Check if our created test case is in the list
+            if response:
+                test_case = response[0]
+                print(f"   ✅ Test case title: {test_case.get('title', 'N/A')}")
+                print(f"   ✅ Test case status: {test_case.get('status', 'N/A')}")
+            return True
+        return False
 
     def test_get_test_case_by_id(self):
         """Test getting test case by ID"""

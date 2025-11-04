@@ -245,6 +245,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         )
         
         return Token(access_token=access_token, token_type="bearer", user=user_response)
+    finally:
+        await conn.close()
 
 @api_router.get("/auth/me", response_model=UserResponse)
 async def get_me(current_user: dict = Depends(get_current_user)):

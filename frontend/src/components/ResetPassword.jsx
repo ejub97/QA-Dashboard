@@ -11,23 +11,19 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const ResetPassword = () => {
-  const [searchParams] = useSearchParams();
+  const { token } = useParams();
   const navigate = useNavigate();
-  const [token, setToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
 
   useEffect(() => {
-    const tokenParam = searchParams.get('token');
-    if (!tokenParam) {
+    if (!token) {
       toast.error('Invalid reset link');
       navigate('/login');
-    } else {
-      setToken(tokenParam);
     }
-  }, [searchParams, navigate]);
+  }, [token, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

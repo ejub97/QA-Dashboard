@@ -28,7 +28,7 @@ const Dashboard = () => {
     const savedDarkMode = localStorage.getItem('darkMode') === 'true';
     setDarkMode(savedDarkMode);
     if (savedDarkMode) {
-      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark-mode');
     }
   }, []);
 

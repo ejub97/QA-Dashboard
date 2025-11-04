@@ -75,8 +75,8 @@ async def init_database():
                 status VARCHAR(50) DEFAULT 'draft',
                 tab_section VARCHAR(255) DEFAULT 'General',
                 created_by VARCHAR(255) REFERENCES users(id) ON DELETE SET NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         

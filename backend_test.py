@@ -106,8 +106,7 @@ class QADashboardPostgreSQLTester:
         return False
 
     def test_login_user(self):
-        """Test user login"""
-        # FastAPI OAuth2PasswordRequestForm expects form data, not JSON
+        """Test user login with PostgreSQL"""
         login_data = {
             "username": self.test_username,
             "password": self.test_user_password
@@ -117,7 +116,7 @@ class QADashboardPostgreSQLTester:
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
         
         self.tests_run += 1
-        print(f"\n🔍 Testing User Login...")
+        print(f"\n🔍 Testing User Login (PostgreSQL)...")
         print(f"   URL: {url}")
         
         try:
@@ -130,9 +129,11 @@ class QADashboardPostgreSQLTester:
                 response_data = response.json()
                 if 'access_token' in response_data:
                     self.access_token = response_data['access_token']
-                    print(f"   Access token obtained")
+                    print(f"   ✅ JWT token obtained from PostgreSQL")
+                    print(f"   ✅ User role: {response_data.get('user', {}).get('role', 'N/A')}")
                 return True
             else:
+                self.failed_tests.append(f"Login: Expected 200, got {response.status_code}")
                 print(f"❌ Failed - Expected 200, got {response.status_code}")
                 try:
                     error_data = response.json()
@@ -141,8 +142,25 @@ class QADashboardPostgreSQLTester:
                     print(f"   Error: {response.text}")
                 return False
         except Exception as e:
+            self.failed_tests.append(f"Login: Exception - {str(e)}")
             print(f"❌ Failed - Error: {str(e)}")
             return False
+
+    def test_get_current_user(self):
+        """Test getting current user info from PostgreSQL"""
+        success, response = self.run_test(
+            "Get Current User (PostgreSQL)",
+            "GET",
+            "auth/me",
+            200
+        )
+        if success and response.get('username') == self.test_username:
+            print(f"   ✅ User data retrieved from PostgreSQL")
+            print(f"   ✅ Username: {response.get('username')}")
+            print(f"   ✅ Email: {response.get('email')}")
+            print(f"   ✅ Role: {response.get('role')}")
+            return True
+        return False
 
     def test_forgot_password(self):
         """Test forgot password endpoint"""

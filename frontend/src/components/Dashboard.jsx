@@ -58,8 +58,7 @@ const Dashboard = () => {
         setSelectedProject(response.data[0]);
       }
     } catch (error) {
-      toast.error('Failed to load projects');
-      console.error(error);
+      console.error('Failed to load projects', error);
     } finally {
       setLoading(false);
     }
@@ -68,7 +67,7 @@ const Dashboard = () => {
   const createProject = async (e) => {
     e.preventDefault();
     if (!projectForm.name.trim()) {
-      toast.error('Project name is required');
+      alert('Project name is required');
       return;
     }
 
@@ -78,35 +77,47 @@ const Dashboard = () => {
       setSelectedProject(response.data);
       setProjectForm({ name: '', description: '' });
       setShowProjectDialog(false);
-      toast.success('Project created successfully!');
     } catch (error) {
-      toast.error('Failed to create project');
-      console.error(error);
+      console.error('Failed to create project', error);
+      alert('Failed to create project');
     }
   };
 
-  const deleteProject = async (project) => {
+  const renameProject = async (projectId, name, description) => {
     try {
-      await axios.delete(`${API}/projects/${project.id}`);
-      const updatedProjects = projects.filter(p => p.id !== project.id);
+      await axios.put(`${API}/projects/${projectId}?name=${encodeURIComponent(name)}&description=${encodeURIComponent(description)}`);
+      const updatedProjects = projects.map(p => 
+        p.id === projectId ? { ...p, name, description } : p
+      );
+      setProjects(updatedProjects);
+      if (selectedProject?.id === projectId) {
+        setSelectedProject({ ...selectedProject, name, description });
+      }
+    } catch (error) {
+      console.error('Failed to rename project', error);
+      alert(error.response?.data?.detail || 'Failed to rename project');
+    }
+  };
+
+  const deleteProject = async (projectId) => {
+    try {
+      await axios.delete(`${API}/projects/${projectId}`);
+      const updatedProjects = projects.filter(p => p.id !== projectId);
       setProjects(updatedProjects);
       
       // If deleted project was selected, select another or clear
-      if (selectedProject?.id === project.id) {
+      if (selectedProject?.id === projectId) {
         setSelectedProject(updatedProjects.length > 0 ? updatedProjects[0] : null);
       }
-      
-      toast.success('Project deleted successfully!');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to delete project');
-      console.error(error);
+      console.error('Failed to delete project', error);
+      alert(error.response?.data?.detail || 'Failed to delete project');
     }
   };
 
   const handleLogout = () => {
     logout();
     navigate('/login');
-    toast.success('Logged out successfully');
   };
 
   const getProjectRole = (project) => {

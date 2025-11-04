@@ -65,6 +65,11 @@ const Login = () => {
               data-testid="login-password"
               className="input-focus"
             />
+            <div className="text-right mt-2">
+              <Link to="/forgot-password" className="text-sm text-blue-600 hover:underline">
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           <Button

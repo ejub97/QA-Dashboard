@@ -277,39 +277,7 @@ class QADashboardPostgreSQLTester:
             return True
         return False
 
-    def test_get_test_case_by_id(self):
-        """Test getting test case by ID"""
-        if not self.test_case_id:
-            print("❌ Skipping - No test case ID available")
-            return False
-        
-        success, response = self.run_test(
-            "Get Test Case by ID",
-            "GET",
-            f"test-cases/{self.test_case_id}",
-            200
-        )
-        return success and response.get('id') == self.test_case_id
-
-    def test_update_test_case(self):
-        """Test updating test case"""
-        if not self.test_case_id:
-            print("❌ Skipping - No test case ID available")
-            return False
-        
-        update_data = {
-            "title": "Updated Test Case Title",
-            "description": "Updated description",
-            "actual_result": "Test completed successfully"
-        }
-        success, response = self.run_test(
-            "Update Test Case",
-            "PUT",
-            f"test-cases/{self.test_case_id}",
-            200,
-            data=update_data
-        )
-        return success and response.get('title') == update_data['title']
+    # Removed duplicate test case methods - using PostgreSQL-specific versions
 
     def test_update_test_case(self):
         """Test updating test case in PostgreSQL"""

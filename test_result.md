@@ -203,12 +203,7 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Password Reset - Forgot Password Endpoint"
-    - "Password Reset - Reset Password with Token"
-    - "Email Service - SendGrid Integration"
-    - "Forgot Password UI"
-    - "Reset Password UI"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"

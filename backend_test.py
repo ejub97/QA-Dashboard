@@ -72,16 +72,28 @@ class QADashboardPostgreSQLTester:
             print(f"❌ Failed - Error: {str(e)}")
             return False, {}
 
+    def test_database_connection(self):
+        """Test PostgreSQL database connection"""
+        success, response = self.run_test(
+            "Database Health Check",
+            "GET",
+            "../health",
+            200
+        )
+        if success and response.get('database') == 'connected':
+            print(f"   ✅ PostgreSQL connection verified")
+            return True
+        return False
+
     def test_register_user(self):
-        """Test user registration for password reset testing"""
+        """Test user registration with PostgreSQL"""
         user_data = {
             "username": self.test_username,
             "email": self.test_user_email,
-            "password": self.test_user_password,
-            "full_name": "Test User"
+            "password": self.test_user_password
         }
         success, response = self.run_test(
-            "Register Test User",
+            "Register New User (PostgreSQL)",
             "POST",
             "auth/register",
             200,
@@ -89,6 +101,7 @@ class QADashboardPostgreSQLTester:
         )
         if success and 'access_token' in response:
             self.access_token = response['access_token']
+            print(f"   ✅ User registered with ID: {response.get('user', {}).get('id', 'N/A')}")
             return True
         return False
 

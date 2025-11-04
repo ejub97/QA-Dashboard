@@ -725,65 +725,76 @@ class QADashboardPostgreSQLTester:
         return success and success2 and success3
 
 def main():
-    print("🚀 Starting QA Dashboard Password Reset API Tests")
-    print("=" * 60)
+    print("🚀 Starting QA Dashboard PostgreSQL Migration Tests")
+    print("=" * 70)
     
-    tester = QADashboardAPITester()
+    tester = QADashboardPostgreSQLTester()
     
-    # Run password reset tests in sequence
+    # Run comprehensive PostgreSQL migration tests
     test_results = []
     
-    print("\n🔐 === PASSWORD RESET FUNCTIONALITY TESTS ===")
+    print("\n🗄️ === POSTGRESQL MIGRATION VERIFICATION ===")
     
-    # Authentication setup
-    print("\n📝 Step 1: Authentication Setup")
+    # Database connection test
+    print("\n📊 Step 1: Database Connection Test")
+    test_results.append(tester.test_database_connection())
+    
+    # Authentication flow tests
+    print("\n🔐 Step 2: Authentication Flow (PostgreSQL)")
     test_results.append(tester.test_register_user())
+    test_results.append(tester.test_login_user())
+    test_results.append(tester.test_get_current_user())
     
-    # Password reset flow tests
-    print("\n🔄 Step 2: Password Reset Flow")
-    test_results.append(tester.test_forgot_password())
-    test_results.append(tester.test_forgot_password_nonexistent_email())
+    # Project management tests
+    print("\n📁 Step 3: Project Management (PostgreSQL)")
+    test_results.append(tester.test_create_project())
+    test_results.append(tester.test_get_projects())
+    test_results.append(tester.test_add_tab_to_project())
     
-    # Extract reset token from logs
-    print("\n📋 Step 3: Extract Reset Token")
-    token_extracted = tester.extract_reset_token_from_logs()
-    test_results.append(token_extracted)
+    # Test case management tests
+    print("\n📝 Step 4: Test Case Management (PostgreSQL)")
+    test_results.append(tester.test_create_test_case())
+    test_results.append(tester.test_get_test_cases_by_project())
+    test_results.append(tester.test_update_test_case())
     
-    # Reset password tests
-    print("\n🔑 Step 4: Reset Password Tests")
-    test_results.append(tester.test_reset_password_with_token())
-    test_results.append(tester.test_reset_password_invalid_token())
-    test_results.append(tester.test_reset_password_weak_password())
+    # Export functionality tests
+    print("\n📤 Step 5: Export Functionality (PostgreSQL)")
+    test_results.append(tester.test_export_word())
+    test_results.append(tester.test_export_excel())
     
-    # Verify password change
-    print("\n✅ Step 5: Verify Password Change")
-    test_results.append(tester.test_login_with_new_password())
+    # Statistics test
+    print("\n📈 Step 6: Statistics (PostgreSQL)")
+    test_results.append(tester.test_statistics())
+    
+    # Cleanup test
+    print("\n🗑️ Step 7: Cleanup (PostgreSQL)")
+    test_results.append(tester.test_delete_test_case())
     
     # Print final results
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 70)
     print(f"📊 Final Results: {tester.tests_passed}/{tester.tests_run} tests passed")
     print(f"Success Rate: {(tester.tests_passed/tester.tests_run)*100:.1f}%")
     
-    # Detailed results
-    print("\n📋 Test Summary:")
-    print("✅ Passed tests:")
-    print("   - User registration")
-    print("   - Forgot password request")
-    print("   - Security: Non-existent email handling")
-    if token_extracted:
-        print("   - Reset token extraction from logs")
-        print("   - Password reset with valid token")
-        print("   - Login with new password")
-    print("   - Invalid token handling")
-    print("   - Weak password validation")
+    # Show failed tests if any
+    if tester.failed_tests:
+        print(f"\n❌ Failed Tests ({len(tester.failed_tests)}):")
+        for failed_test in tester.failed_tests:
+            print(f"   - {failed_test}")
     
+    # Migration status
     if tester.tests_passed == tester.tests_run:
-        print("\n🎉 All password reset tests passed!")
-        print("✅ Password reset functionality is working correctly!")
+        print("\n🎉 PostgreSQL Migration Successful!")
+        print("✅ All QA Dashboard functionality working with PostgreSQL!")
+        print("✅ Database schema created correctly")
+        print("✅ All CRUD operations functional")
+        print("✅ Authentication system working")
+        print("✅ Export features operational")
         return 0
     else:
-        print(f"\n❌ {tester.tests_run - tester.tests_passed} tests failed!")
+        print(f"\n❌ PostgreSQL Migration Issues Detected!")
+        print(f"❌ {tester.tests_run - tester.tests_passed} tests failed!")
         print("🔍 Check the detailed output above for specific failures.")
+        print("🔧 Migration may need additional fixes.")
         return 1
 
 if __name__ == "__main__":

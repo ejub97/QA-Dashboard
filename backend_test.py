@@ -253,15 +253,7 @@ class QADashboardPostgreSQLTester:
             return True
         return False
 
-    def test_get_test_cases(self):
-        """Test getting test cases"""
-        success, response = self.run_test(
-            "Get All Test Cases",
-            "GET",
-            "test-cases",
-            200
-        )
-        return success and isinstance(response, list)
+    # Removed old test case methods - using PostgreSQL-specific tests
 
     def test_get_test_cases_by_project(self):
         """Test getting test cases by project from PostgreSQL"""

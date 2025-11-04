@@ -54,8 +54,8 @@ async def init_database():
                 name VARCHAR(255) NOT NULL,
                 description TEXT,
                 created_by VARCHAR(255) REFERENCES users(id) ON DELETE SET NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                 tabs JSONB DEFAULT '["General"]'::jsonb
             )
         ''')

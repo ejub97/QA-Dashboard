@@ -583,6 +583,9 @@ async def create_test_case(
             test_case_data.actual_result or "", "draft", current_user['id']
         )
         
+        # Fetch the created test case to get the actual timestamps
+        created_tc = await conn.fetchrow('SELECT * FROM test_cases WHERE id = $1', tc_id)
+        
         return TestCase(
             id=tc_id,
             project_id=test_case_data.project_id,
@@ -596,8 +599,8 @@ async def create_test_case(
             actual_result=test_case_data.actual_result or "",
             status="draft",
             created_by=current_user['id'],
-            created_at=now,
-            updated_at=now
+            created_at=created_tc['created_at'],
+            updated_at=created_tc['updated_at']
         )
 
 @api_router.put("/testcases/{test_case_id}", response_model=TestCase)

@@ -17,7 +17,7 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const Dashboard = () => {
-  const { inviteCode } = useParams();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -25,6 +25,7 @@ const Dashboard = () => {
   const [showProjectDialog, setShowProjectDialog] = useState(false);
   const [projectForm, setProjectForm] = useState({ name: '', description: '' });
   const [darkMode, setDarkMode] = useState(false);
+  const [projectRefreshKey, setProjectRefreshKey] = useState(0);
 
   useEffect(() => {
     const savedDarkMode = localStorage.getItem('darkMode') === 'true';

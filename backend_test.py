@@ -70,6 +70,271 @@ class QADashboardAPITester:
             print(f"❌ Failed - Error: {str(e)}")
             return False, {}
 
+    def test_register_user(self):
+        """Test user registration for password reset testing"""
+        user_data = {
+            "username": self.test_username,
+            "email": self.test_user_email,
+            "password": self.test_user_password,
+            "full_name": "Test User"
+        }
+        success, response = self.run_test(
+            "Register Test User",
+            "POST",
+            "auth/register",
+            200,
+            data=user_data
+        )
+        if success and 'access_token' in response:
+            self.access_token = response['access_token']
+            return True
+        return False
+
+    def test_login_user(self):
+        """Test user login"""
+        # FastAPI OAuth2PasswordRequestForm expects form data, not JSON
+        login_data = {
+            "username": self.test_username,
+            "password": self.test_user_password
+        }
+        
+        url = f"{self.api_url}/auth/login"
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        
+        self.tests_run += 1
+        print(f"\n🔍 Testing User Login...")
+        print(f"   URL: {url}")
+        
+        try:
+            response = requests.post(url, data=login_data, headers=headers)
+            success = response.status_code == 200
+            
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                response_data = response.json()
+                if 'access_token' in response_data:
+                    self.access_token = response_data['access_token']
+                    print(f"   Access token obtained")
+                return True
+            else:
+                print(f"❌ Failed - Expected 200, got {response.status_code}")
+                try:
+                    error_data = response.json()
+                    print(f"   Error: {error_data}")
+                except:
+                    print(f"   Error: {response.text}")
+                return False
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False
+
+    def test_forgot_password(self):
+        """Test forgot password endpoint"""
+        forgot_data = {
+            "email": self.test_user_email
+        }
+        success, response = self.run_test(
+            "Forgot Password Request",
+            "POST",
+            "auth/forgot-password",
+            200,
+            data=forgot_data
+        )
+        
+        if success:
+            expected_message = "If an account with that email exists, a password reset link has been sent."
+            if response.get('message') == expected_message:
+                print(f"   ✅ Correct response message received")
+                return True
+            else:
+                print(f"   ❌ Unexpected message: {response.get('message')}")
+                return False
+        return False
+
+    def test_forgot_password_nonexistent_email(self):
+        """Test forgot password with non-existent email (should still return success for security)"""
+        forgot_data = {
+            "email": "nonexistent@example.com"
+        }
+        success, response = self.run_test(
+            "Forgot Password - Non-existent Email",
+            "POST",
+            "auth/forgot-password",
+            200,
+            data=forgot_data
+        )
+        
+        if success:
+            expected_message = "If an account with that email exists, a password reset link has been sent."
+            if response.get('message') == expected_message:
+                print(f"   ✅ Security: Same response for non-existent email")
+                return True
+            else:
+                print(f"   ❌ Security issue: Different response for non-existent email")
+                return False
+        return False
+
+    def extract_reset_token_from_logs(self):
+        """Extract reset token from backend logs"""
+        print(f"\n🔍 Extracting Reset Token from Backend Logs...")
+        
+        try:
+            # Check supervisor backend logs
+            import subprocess
+            result = subprocess.run(['tail', '-n', '50', '/var/log/supervisor/backend.out.log'], 
+                                  capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                log_content = result.stdout
+                print(f"   Backend logs found, searching for reset token...")
+                
+                # Look for reset link pattern in logs
+                reset_link_pattern = r'Reset Link: https://testcenter\.preview\.emergentagent\.com/reset-password/([A-Za-z0-9_-]+)'
+                match = re.search(reset_link_pattern, log_content)
+                
+                if match:
+                    self.reset_token = match.group(1)
+                    print(f"   ✅ Reset token extracted: {self.reset_token[:10]}...")
+                    return True
+                else:
+                    print(f"   ❌ Reset token not found in logs")
+                    print(f"   Log content preview: {log_content[-500:]}")
+                    return False
+            else:
+                print(f"   ❌ Could not read backend logs")
+                return False
+                
+        except Exception as e:
+            print(f"   ❌ Error extracting token: {str(e)}")
+            return False
+
+    def test_reset_password_with_token(self):
+        """Test reset password with valid token"""
+        if not self.reset_token:
+            print("❌ Skipping - No reset token available")
+            return False
+        
+        new_password = "NewPass456"
+        reset_data = {
+            "token": self.reset_token,
+            "new_password": new_password
+        }
+        
+        success, response = self.run_test(
+            "Reset Password with Token",
+            "POST",
+            "auth/reset-password",
+            200,
+            data=reset_data
+        )
+        
+        if success:
+            expected_message = "Password has been reset successfully. You can now login with your new password."
+            if response.get('message') == expected_message:
+                print(f"   ✅ Password reset successful")
+                # Update our test password for future login tests
+                self.test_user_password = new_password
+                return True
+            else:
+                print(f"   ❌ Unexpected message: {response.get('message')}")
+                return False
+        return False
+
+    def test_reset_password_invalid_token(self):
+        """Test reset password with invalid token"""
+        reset_data = {
+            "token": "invalid_token_12345",
+            "new_password": "NewPass789"
+        }
+        
+        success, response = self.run_test(
+            "Reset Password - Invalid Token",
+            "POST",
+            "auth/reset-password",
+            400,
+            data=reset_data
+        )
+        
+        if success:
+            expected_detail = "Invalid or expired reset token"
+            if response.get('detail') == expected_detail:
+                print(f"   ✅ Correct error for invalid token")
+                return True
+            else:
+                print(f"   ❌ Unexpected error: {response.get('detail')}")
+                return False
+        return False
+
+    def test_reset_password_weak_password(self):
+        """Test reset password with weak password"""
+        if not self.reset_token:
+            # Generate a fake token for this test since we're testing validation
+            fake_token = "fake_token_for_validation_test"
+        else:
+            fake_token = self.reset_token
+            
+        reset_data = {
+            "token": fake_token,
+            "new_password": "123"  # Too short
+        }
+        
+        success, response = self.run_test(
+            "Reset Password - Weak Password",
+            "POST",
+            "auth/reset-password",
+            400,
+            data=reset_data
+        )
+        
+        if success:
+            expected_detail = "Password must be at least 6 characters"
+            if response.get('detail') == expected_detail:
+                print(f"   ✅ Correct validation for weak password")
+                return True
+            else:
+                print(f"   ❌ Unexpected validation error: {response.get('detail')}")
+                return False
+        return False
+
+    def test_login_with_new_password(self):
+        """Test login with the new password after reset"""
+        login_data = {
+            "username": self.test_username,
+            "password": self.test_user_password  # This should be the new password now
+        }
+        
+        url = f"{self.api_url}/auth/login"
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        
+        self.tests_run += 1
+        print(f"\n🔍 Testing Login with New Password...")
+        print(f"   URL: {url}")
+        
+        try:
+            response = requests.post(url, data=login_data, headers=headers)
+            success = response.status_code == 200
+            
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                response_data = response.json()
+                if 'access_token' in response_data:
+                    self.access_token = response_data['access_token']
+                    print(f"   ✅ Login successful with new password")
+                return True
+            else:
+                print(f"❌ Failed - Expected 200, got {response.status_code}")
+                try:
+                    error_data = response.json()
+                    print(f"   Error: {error_data}")
+                except:
+                    print(f"   Error: {response.text}")
+                return False
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False
+
     def test_create_project(self):
         """Test project creation"""
         project_data = {

@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -6,20 +7,22 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import io
-import csv
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-import secrets
-from openpyxl import Workbook, load_workbook
+from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 import pandas as pd
-
+from auth import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    decode_token,
+    oauth2_scheme
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -29,31 +32,70 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
 
-# Define Models
+# ============ MODELS ============
+
+class User(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    username: str
+    email: EmailStr
+    hashed_password: str
+    full_name: str
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class UserCreate(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+    full_name: str
+
+class UserResponse(BaseModel):
+    id: str
+    username: str
+    email: str
+    full_name: str
+    is_active: bool
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
+
+class ProjectMember(BaseModel):
+    user_id: str
+    username: str
+    role: str  # admin, editor, viewer
+    added_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 class Project(BaseModel):
     model_config = ConfigDict(extra="ignore")
     
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     description: Optional[str] = ""
-    invite_code: str = Field(default_factory=lambda: secrets.token_urlsafe(8))
+    owner_id: str
+    members: List[ProjectMember] = []
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = ""
 
+class AddMemberRequest(BaseModel):
+    username: str
+    role: str  # admin, editor, viewer
+
 class Comment(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     text: str
     created_by: str
+    user_id: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class TestCase(BaseModel):
@@ -74,6 +116,7 @@ class TestCase(BaseModel):
     executed_at: Optional[datetime] = None
     comments: List[Comment] = []
     is_template: bool = False
+    created_by: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -113,24 +156,159 @@ class BulkStatusUpdate(BaseModel):
 class CommentCreate(BaseModel):
     test_case_id: str
     text: str
-    created_by: str
 
 
-# Project Routes
-@api_router.post("/projects", response_model=Project)
-async def create_project(input: ProjectCreate):
-    project_dict = input.model_dump()
-    project_obj = Project(**project_dict)
+# ============ AUTH DEPENDENCIES ============
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     
-    doc = project_obj.model_dump()
+    payload = decode_token(token)
+    if payload is None:
+        raise credentials_exception
+    
+    user_id: str = payload.get("sub")
+    if user_id is None:
+        raise credentials_exception
+    
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if user is None:
+        raise credentials_exception
+    
+    if not user.get("is_active", False):
+        raise HTTPException(status_code=400, detail="Inactive user")
+    
+    return user
+
+async def check_project_permission(project_id: str, user: dict, required_role: str = "viewer"):
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Owner has all permissions
+    if project["owner_id"] == user["id"]:
+        return project
+    
+    # Check if user is a member
+    member = next((m for m in project.get("members", []) if m["user_id"] == user["id"]), None)
+    if not member:
+        raise HTTPException(status_code=403, detail="You don't have access to this project")
+    
+    # Check role permissions
+    role_hierarchy = {"viewer": 0, "editor": 1, "admin": 2}
+    if role_hierarchy.get(member["role"], 0) < role_hierarchy.get(required_role, 0):
+        raise HTTPException(status_code=403, detail=f"You need {required_role} role for this action")
+    
+    return project
+
+
+# ============ AUTH ROUTES ============
+
+@api_router.post("/auth/register", response_model=Token)
+async def register(user_data: UserCreate):
+    # Check if username exists
+    existing_user = await db.users.find_one({"username": user_data.username})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    # Check if email exists
+    existing_email = await db.users.find_one({"email": user_data.email})
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create user
+    hashed_password = get_password_hash(user_data.password)
+    user = User(
+        username=user_data.username,
+        email=user_data.email,
+        hashed_password=hashed_password,
+        full_name=user_data.full_name
+    )
+    
+    user_dict = user.model_dump()
+    user_dict['created_at'] = user_dict['created_at'].isoformat()
+    
+    await db.users.insert_one(user_dict)
+    
+    # Create access token
+    access_token = create_access_token(data={"sub": user.id})
+    
+    user_response = UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active
+    )
+    
+    return Token(access_token=access_token, token_type="bearer", user=user_response)
+
+@api_router.post("/auth/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = await db.users.find_one({"username": form_data.username}, {"_id": 0})
+    if not user or not verify_password(form_data.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not user.get("is_active", False):
+        raise HTTPException(status_code=400, detail="Inactive user")
+    
+    access_token = create_access_token(data={"sub": user["id"]})
+    
+    user_response = UserResponse(
+        id=user["id"],
+        username=user["username"],
+        email=user["email"],
+        full_name=user["full_name"],
+        is_active=user["is_active"]
+    )
+    
+    return Token(access_token=access_token, token_type="bearer", user=user_response)
+
+@api_router.get("/auth/me", response_model=UserResponse)
+async def get_me(current_user: dict = Depends(get_current_user)):
+    return UserResponse(
+        id=current_user["id"],
+        username=current_user["username"],
+        email=current_user["email"],
+        full_name=current_user["full_name"],
+        is_active=current_user["is_active"]
+    )
+
+
+# ============ PROJECT ROUTES ============
+
+@api_router.post("/projects", response_model=Project)
+async def create_project(input: ProjectCreate, current_user: dict = Depends(get_current_user)):
+    project = Project(
+        name=input.name,
+        description=input.description,
+        owner_id=current_user["id"],
+        members=[]
+    )
+    
+    doc = project.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.projects.insert_one(doc)
-    return project_obj
+    return project
 
 @api_router.get("/projects", response_model=List[Project])
-async def get_projects():
-    projects = await db.projects.find({}, {"_id": 0}).to_list(1000)
+async def get_projects(current_user: dict = Depends(get_current_user)):
+    # Get projects where user is owner or member
+    projects = await db.projects.find({
+        "$or": [
+            {"owner_id": current_user["id"]},
+            {"members.user_id": current_user["id"]}
+        ]
+    }, {"_id": 0}).to_list(1000)
     
     for project in projects:
         if isinstance(project['created_at'], str):
@@ -139,23 +317,8 @@ async def get_projects():
     return projects
 
 @api_router.get("/projects/{project_id}", response_model=Project)
-async def get_project(project_id: str):
-    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
-    
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    if isinstance(project['created_at'], str):
-        project['created_at'] = datetime.fromisoformat(project['created_at'])
-    
-    return project
-
-@api_router.get("/projects/invite/{invite_code}", response_model=Project)
-async def get_project_by_invite(invite_code: str):
-    project = await db.projects.find_one({"invite_code": invite_code}, {"_id": 0})
-    
-    if not project:
-        raise HTTPException(status_code=404, detail="Invalid invite code")
+async def get_project(project_id: str, current_user: dict = Depends(get_current_user)):
+    project = await check_project_permission(project_id, current_user, "viewer")
     
     if isinstance(project['created_at'], str):
         project['created_at'] = datetime.fromisoformat(project['created_at'])
@@ -163,17 +326,89 @@ async def get_project_by_invite(invite_code: str):
     return project
 
 @api_router.delete("/projects/{project_id}")
-async def delete_project(project_id: str):
-    await db.test_cases.delete_many({"project_id": project_id})
-    result = await db.projects.delete_one({"id": project_id})
-    
-    if result.deleted_count == 0:
+async def delete_project(project_id: str, current_user: dict = Depends(get_current_user)):
+    project = await db.projects.find_one({"id": project_id})
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    return {"message": "Project and associated test cases deleted successfully"}
+    # Only owner can delete
+    if project["owner_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Only project owner can delete the project")
+    
+    await db.test_cases.delete_many({"project_id": project_id})
+    await db.projects.delete_one({"id": project_id})
+    
+    return {"message": "Project deleted successfully"}
+
+@api_router.post("/projects/{project_id}/members")
+async def add_project_member(
+    project_id: str,
+    member_data: AddMemberRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    project = await check_project_permission(project_id, current_user, "admin")
+    
+    # Find user by username
+    user = await db.users.find_one({"username": member_data.username}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if already a member
+    if any(m["user_id"] == user["id"] for m in project.get("members", [])):
+        raise HTTPException(status_code=400, detail="User is already a member")
+    
+    # Add member
+    member = ProjectMember(
+        user_id=user["id"],
+        username=user["username"],
+        role=member_data.role
+    )
+    
+    member_dict = member.model_dump()
+    member_dict['added_at'] = member_dict['added_at'].isoformat()
+    
+    await db.projects.update_one(
+        {"id": project_id},
+        {"$push": {"members": member_dict}}
+    )
+    
+    return {"message": f"User {member_data.username} added as {member_data.role}"}
+
+@api_router.put("/projects/{project_id}/members/{user_id}/role")
+async def update_member_role(
+    project_id: str,
+    user_id: str,
+    role: str,
+    current_user: dict = Depends(get_current_user)
+):
+    project = await check_project_permission(project_id, current_user, "admin")
+    
+    await db.projects.update_one(
+        {"id": project_id, "members.user_id": user_id},
+        {"$set": {"members.$.role": role}}
+    )
+    
+    return {"message": "Role updated successfully"}
+
+@api_router.delete("/projects/{project_id}/members/{user_id}")
+async def remove_project_member(
+    project_id: str,
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    project = await check_project_permission(project_id, current_user, "admin")
+    
+    await db.projects.update_one(
+        {"id": project_id},
+        {"$pull": {"members": {"user_id": user_id}}}
+    )
+    
+    return {"message": "Member removed successfully"}
 
 @api_router.get("/projects/{project_id}/tabs")
-async def get_project_tabs(project_id: str):
+async def get_project_tabs(project_id: str, current_user: dict = Depends(get_current_user)):
+    await check_project_permission(project_id, current_user, "viewer")
+    
     test_cases = await db.test_cases.find({"project_id": project_id}, {"_id": 0, "tab": 1}).to_list(1000)
     tabs = list(set([tc.get('tab', 'General') for tc in test_cases]))
     if not tabs:
@@ -181,7 +416,9 @@ async def get_project_tabs(project_id: str):
     return {"tabs": sorted(tabs)}
 
 @api_router.get("/projects/{project_id}/statistics")
-async def get_project_statistics(project_id: str):
+async def get_project_statistics(project_id: str, current_user: dict = Depends(get_current_user)):
+    await check_project_permission(project_id, current_user, "viewer")
+    
     test_cases = await db.test_cases.find({"project_id": project_id, "is_template": False}, {"_id": 0}).to_list(1000)
     
     stats = {
@@ -207,27 +444,37 @@ async def get_project_statistics(project_id: str):
     return stats
 
 
-# Test Case Routes
+# ============ TEST CASE ROUTES ============
+
 @api_router.post("/test-cases", response_model=TestCase)
-async def create_test_case(input: TestCaseCreate):
-    project = await db.projects.find_one({"id": input.project_id})
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+async def create_test_case(input: TestCaseCreate, current_user: dict = Depends(get_current_user)):
+    await check_project_permission(input.project_id, current_user, "editor")
     
-    test_case_dict = input.model_dump()
-    test_case_obj = TestCase(**test_case_dict)
+    test_case = TestCase(
+        **input.model_dump(),
+        created_by=current_user["username"]
+    )
     
-    doc = test_case_obj.model_dump()
+    doc = test_case.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     doc['updated_at'] = doc['updated_at'].isoformat()
-    if doc['executed_at']:
+    if doc.get('executed_at'):
         doc['executed_at'] = doc['executed_at'].isoformat()
     
     await db.test_cases.insert_one(doc)
-    return test_case_obj
+    return test_case
 
 @api_router.get("/test-cases", response_model=List[TestCase])
-async def get_test_cases(project_id: Optional[str] = None, tab: Optional[str] = None, is_template: Optional[bool] = None, search: Optional[str] = None):
+async def get_test_cases(
+    project_id: Optional[str] = None,
+    tab: Optional[str] = None,
+    is_template: Optional[bool] = None,
+    search: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    if project_id:
+        await check_project_permission(project_id, current_user, "viewer")
+    
     query = {}
     if project_id:
         query["project_id"] = project_id
@@ -246,7 +493,6 @@ async def get_test_cases(project_id: Optional[str] = None, tab: Optional[str] = 
         if tc.get('executed_at') and isinstance(tc['executed_at'], str):
             tc['executed_at'] = datetime.fromisoformat(tc['executed_at'])
     
-    # Search filter
     if search:
         search_lower = search.lower()
         test_cases = [tc for tc in test_cases if 
@@ -257,19 +503,20 @@ async def get_test_cases(project_id: Optional[str] = None, tab: Optional[str] = 
     return test_cases
 
 @api_router.post("/test-cases/{test_case_id}/duplicate", response_model=TestCase)
-async def duplicate_test_case(test_case_id: str):
+async def duplicate_test_case(test_case_id: str, current_user: dict = Depends(get_current_user)):
     test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
-    
     if not test_case:
         raise HTTPException(status_code=404, detail="Test case not found")
     
-    # Create new test case with same data
+    await check_project_permission(test_case['project_id'], current_user, "editor")
+    
     new_tc = TestCase(**test_case)
     new_tc.id = str(uuid.uuid4())
     new_tc.title = f"{test_case['title']} (Copy)"
     new_tc.created_at = datetime.now(timezone.utc)
     new_tc.updated_at = datetime.now(timezone.utc)
     new_tc.comments = []
+    new_tc.created_by = current_user["username"]
     
     doc = new_tc.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
@@ -281,11 +528,16 @@ async def duplicate_test_case(test_case_id: str):
     return new_tc
 
 @api_router.put("/test-cases/{test_case_id}", response_model=TestCase)
-async def update_test_case(test_case_id: str, input: TestCaseUpdate):
+async def update_test_case(
+    test_case_id: str,
+    input: TestCaseUpdate,
+    current_user: dict = Depends(get_current_user)
+):
     test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
-    
     if not test_case:
         raise HTTPException(status_code=404, detail="Test case not found")
+    
+    await check_project_permission(test_case['project_id'], current_user, "editor")
     
     update_data = {k: v for k, v in input.model_dump().items() if v is not None}
     update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
@@ -310,18 +562,22 @@ async def update_test_case(test_case_id: str, input: TestCaseUpdate):
     return updated_test_case
 
 @api_router.patch("/test-cases/{test_case_id}/status", response_model=TestCase)
-async def update_test_case_status(test_case_id: str, input: StatusUpdate):
+async def update_test_case_status(
+    test_case_id: str,
+    input: StatusUpdate,
+    current_user: dict = Depends(get_current_user)
+):
     test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
-    
     if not test_case:
         raise HTTPException(status_code=404, detail="Test case not found")
     
+    await check_project_permission(test_case['project_id'], current_user, "editor")
+    
     update_data = {
-        "status": input.status, 
+        "status": input.status,
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
     
-    # Set executed_at when changing to success or fail
     if input.status in ['success', 'fail']:
         update_data['executed_at'] = datetime.now(timezone.utc).isoformat()
     
@@ -342,7 +598,13 @@ async def update_test_case_status(test_case_id: str, input: StatusUpdate):
     return updated_test_case
 
 @api_router.post("/test-cases/bulk-status")
-async def bulk_update_status(input: BulkStatusUpdate):
+async def bulk_update_status(input: BulkStatusUpdate, current_user: dict = Depends(get_current_user)):
+    # Verify all test cases belong to projects user has access to
+    test_cases = await db.test_cases.find({"id": {"$in": input.test_case_ids}}, {"_id": 0, "project_id": 1}).to_list(1000)
+    
+    for tc in test_cases:
+        await check_project_permission(tc['project_id'], current_user, "editor")
+    
     update_data = {
         "status": input.status,
         "updated_at": datetime.now(timezone.utc).isoformat()
@@ -359,26 +621,43 @@ async def bulk_update_status(input: BulkStatusUpdate):
     return {"updated_count": result.modified_count}
 
 @api_router.delete("/test-cases/bulk")
-async def bulk_delete_test_cases(test_case_ids: List[str]):
+async def bulk_delete_test_cases(test_case_ids: List[str], current_user: dict = Depends(get_current_user)):
+    test_cases = await db.test_cases.find({"id": {"$in": test_case_ids}}, {"_id": 0, "project_id": 1}).to_list(1000)
+    
+    for tc in test_cases:
+        await check_project_permission(tc['project_id'], current_user, "editor")
+    
     result = await db.test_cases.delete_many({"id": {"$in": test_case_ids}})
     return {"deleted_count": result.deleted_count}
 
 @api_router.delete("/test-cases/{test_case_id}")
-async def delete_test_case(test_case_id: str):
-    result = await db.test_cases.delete_one({"id": test_case_id})
-    
-    if result.deleted_count == 0:
+async def delete_test_case(test_case_id: str, current_user: dict = Depends(get_current_user)):
+    test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
+    if not test_case:
         raise HTTPException(status_code=404, detail="Test case not found")
     
+    await check_project_permission(test_case['project_id'], current_user, "editor")
+    
+    await db.test_cases.delete_one({"id": test_case_id})
     return {"message": "Test case deleted successfully"}
 
 @api_router.post("/test-cases/{test_case_id}/comments", response_model=Comment)
-async def add_comment(test_case_id: str, input: CommentCreate):
+async def add_comment(
+    test_case_id: str,
+    input: CommentCreate,
+    current_user: dict = Depends(get_current_user)
+):
     test_case = await db.test_cases.find_one({"id": test_case_id})
     if not test_case:
         raise HTTPException(status_code=404, detail="Test case not found")
     
-    comment = Comment(text=input.text, created_by=input.created_by)
+    await check_project_permission(test_case['project_id'], current_user, "viewer")
+    
+    comment = Comment(
+        text=input.text,
+        created_by=current_user["username"],
+        user_id=current_user["id"]
+    )
     comment_dict = comment.model_dump()
     comment_dict['created_at'] = comment_dict['created_at'].isoformat()
     
@@ -390,59 +669,11 @@ async def add_comment(test_case_id: str, input: CommentCreate):
     return comment
 
 
-# Import/Export Routes
-@api_router.post("/test-cases/import/{project_id}")
-async def import_test_cases(project_id: str, file: UploadFile = File(...)):
-    project = await db.projects.find_one({"id": project_id})
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    contents = await file.read()
-    
-    try:
-        if file.filename.endswith('.csv'):
-            df = pd.read_csv(io.BytesIO(contents))
-        elif file.filename.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(io.BytesIO(contents))
-        else:
-            raise HTTPException(status_code=400, detail="Unsupported file format")
-        
-        imported_count = 0
-        for _, row in df.iterrows():
-            tc_data = {
-                "project_id": project_id,
-                "tab": row.get('Tab', row.get('tab', 'General')),
-                "title": row.get('Title', row.get('title', '')),
-                "description": row.get('Description', row.get('description', '')),
-                "priority": row.get('Priority', row.get('priority', 'medium')),
-                "type": row.get('Type', row.get('type', 'functional')),
-                "steps": row.get('Steps', row.get('steps', '')),
-                "expected_result": row.get('Expected Result', row.get('expected_result', '')),
-                "actual_result": row.get('Actual Result', row.get('actual_result', '')),
-            }
-            
-            if tc_data['title']:  # Only import if title exists
-                tc_create = TestCaseCreate(**tc_data)
-                tc = TestCase(**tc_create.model_dump())
-                doc = tc.model_dump()
-                doc['created_at'] = doc['created_at'].isoformat()
-                doc['updated_at'] = doc['updated_at'].isoformat()
-                if doc.get('executed_at'):
-                    doc['executed_at'] = doc['executed_at'].isoformat()
-                
-                await db.test_cases.insert_one(doc)
-                imported_count += 1
-        
-        return {"imported_count": imported_count}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Import failed: {str(e)}")
-
+# ============ EXPORT ROUTES (Viewer can access) ============
 
 @api_router.get("/test-cases/export/excel/{project_id}")
-async def export_excel(project_id: str):
-    project = await db.projects.find_one({"id": project_id})
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+async def export_excel(project_id: str, current_user: dict = Depends(get_current_user)):
+    project = await check_project_permission(project_id, current_user, "viewer")
     
     test_cases = await db.test_cases.find({"project_id": project_id, "is_template": False}, {"_id": 0}).to_list(1000)
     
@@ -542,10 +773,8 @@ async def export_excel(project_id: str):
     )
 
 @api_router.get("/test-cases/export/docx/{project_id}")
-async def export_docx(project_id: str):
-    project = await db.projects.find_one({"id": project_id})
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+async def export_docx(project_id: str, current_user: dict = Depends(get_current_user)):
+    project = await check_project_permission(project_id, current_user, "viewer")
     
     test_cases = await db.test_cases.find({"project_id": project_id, "is_template": False}, {"_id": 0}).to_list(1000)
     test_cases.sort(key=lambda x: (x.get('tab', 'General'), x.get('created_at', '')))
@@ -553,7 +782,7 @@ async def export_docx(project_id: str):
     doc = Document()
     
     title = doc.add_heading(f"{project['name']} - Test Cases", 0)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title.alignment = 1  # Center
     
     table = doc.add_table(rows=1, cols=9)
     table.style = 'Light Grid Accent 1'

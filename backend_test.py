@@ -369,13 +369,13 @@ class QADashboardPostgreSQLTester:
             return False
 
     def test_create_project(self):
-        """Test project creation"""
+        """Test project creation in PostgreSQL"""
         project_data = {
-            "name": f"Test Project {datetime.now().strftime('%H%M%S')}",
-            "description": "Test project for API testing"
+            "name": "PG Test Project",
+            "description": "Testing PostgreSQL migration"
         }
         success, response = self.run_test(
-            "Create Project",
+            "Create Project (PostgreSQL)",
             "POST",
             "projects",
             200,
@@ -383,19 +383,45 @@ class QADashboardPostgreSQLTester:
         )
         if success and 'id' in response:
             self.project_id = response['id']
-            self.invite_code = response.get('invite_code')
+            print(f"   ✅ Project created with ID: {self.project_id}")
+            print(f"   ✅ Default tabs: {response.get('tabs', [])}")
             return True
         return False
 
     def test_get_projects(self):
-        """Test getting all projects"""
+        """Test getting all projects from PostgreSQL"""
         success, response = self.run_test(
-            "Get All Projects",
+            "List Projects (PostgreSQL)",
             "GET",
             "projects",
             200
         )
-        return success and isinstance(response, list)
+        if success and isinstance(response, list):
+            print(f"   ✅ Retrieved {len(response)} projects from PostgreSQL")
+            # Check if our created project is in the list
+            project_found = any(p.get('id') == self.project_id for p in response)
+            if project_found:
+                print(f"   ✅ Created project found in list")
+            return project_found
+        return False
+
+    def test_add_tab_to_project(self):
+        """Test adding tab to project in PostgreSQL"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        success, response = self.run_test(
+            "Add Tab to Project (PostgreSQL)",
+            "POST",
+            f"projects/{self.project_id}/tabs?tab_name=TestTab",
+            200
+        )
+        if success and response.get('message') == 'Tab added successfully':
+            print(f"   ✅ Tab added successfully")
+            print(f"   ✅ Updated tabs: {response.get('tabs', [])}")
+            return True
+        return False
 
     def test_get_project_by_id(self):
         """Test getting project by ID"""

@@ -1,7 +1,12 @@
 import { Button } from '@/components/ui/button';
-import { FolderOpen, Shield } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { FolderOpen, Shield, Trash2, Edit2, X, Check } from 'lucide-react';
+import { useState } from 'react';
 
-const ProjectList = ({ projects, selectedProject, onSelectProject, onDeleteProject, user }) => {
+const ProjectList = ({ projects, selectedProject, onSelectProject, onDeleteProject, onRenameProject, user }) => {
+  const [editingProject, setEditingProject] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
   const getProjectRole = (project) => {
     if (!user) return null;
     if (project.owner_id === user.id) return 'owner';

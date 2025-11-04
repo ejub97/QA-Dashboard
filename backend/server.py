@@ -201,10 +201,9 @@ async def register(user_data: UserCreate):
         hashed_password = get_password_hash(user_data.password)
         
         await conn.execute(
-            '''INSERT INTO users (id, username, email, hashed_password, role, created_at)
-               VALUES ($1, $2, $3, $4, $5, $6)''',
-            user_id, user_data.username, user_data.email, hashed_password,
-            "editor", datetime.now(timezone.utc)
+            '''INSERT INTO users (id, username, email, hashed_password, role)
+               VALUES ($1, $2, $3, $4, $5)''',
+            user_id, user_data.username, user_data.email, hashed_password, "editor"
         )
         
         # Create access token

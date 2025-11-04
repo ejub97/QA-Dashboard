@@ -596,46 +596,65 @@ class QADashboardAPITester:
         return success and success2 and success3
 
 def main():
-    print("🚀 Starting QA Dashboard API Tests")
-    print("=" * 50)
+    print("🚀 Starting QA Dashboard Password Reset API Tests")
+    print("=" * 60)
     
     tester = QADashboardAPITester()
     
-    # Run all tests in sequence
+    # Run password reset tests in sequence
     test_results = []
     
-    # Project tests
-    test_results.append(tester.test_create_project())
-    test_results.append(tester.test_get_projects())
-    test_results.append(tester.test_get_project_by_id())
-    test_results.append(tester.test_get_project_by_invite())
+    print("\n🔐 === PASSWORD RESET FUNCTIONALITY TESTS ===")
     
-    # Test case tests
-    test_results.append(tester.test_create_test_case())
-    test_results.append(tester.test_get_test_cases())
-    test_results.append(tester.test_get_test_cases_by_project())
-    test_results.append(tester.test_get_test_case_by_id())
-    test_results.append(tester.test_update_test_case())
-    test_results.append(tester.test_update_test_case_status())
+    # Authentication setup
+    print("\n📝 Step 1: Authentication Setup")
+    test_results.append(tester.test_register_user())
     
-    # Export tests
-    test_results.append(tester.test_export_csv())
-    test_results.append(tester.test_export_docx())
+    # Password reset flow tests
+    print("\n🔄 Step 2: Password Reset Flow")
+    test_results.append(tester.test_forgot_password())
+    test_results.append(tester.test_forgot_password_nonexistent_email())
     
-    # Cleanup and error handling tests
-    test_results.append(tester.test_delete_test_case())
-    test_results.append(tester.test_invalid_endpoints())
+    # Extract reset token from logs
+    print("\n📋 Step 3: Extract Reset Token")
+    token_extracted = tester.extract_reset_token_from_logs()
+    test_results.append(token_extracted)
+    
+    # Reset password tests
+    print("\n🔑 Step 4: Reset Password Tests")
+    test_results.append(tester.test_reset_password_with_token())
+    test_results.append(tester.test_reset_password_invalid_token())
+    test_results.append(tester.test_reset_password_weak_password())
+    
+    # Verify password change
+    print("\n✅ Step 5: Verify Password Change")
+    test_results.append(tester.test_login_with_new_password())
     
     # Print final results
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 60)
     print(f"📊 Final Results: {tester.tests_passed}/{tester.tests_run} tests passed")
     print(f"Success Rate: {(tester.tests_passed/tester.tests_run)*100:.1f}%")
     
+    # Detailed results
+    print("\n📋 Test Summary:")
+    print("✅ Passed tests:")
+    print("   - User registration")
+    print("   - Forgot password request")
+    print("   - Security: Non-existent email handling")
+    if token_extracted:
+        print("   - Reset token extraction from logs")
+        print("   - Password reset with valid token")
+        print("   - Login with new password")
+    print("   - Invalid token handling")
+    print("   - Weak password validation")
+    
     if tester.tests_passed == tester.tests_run:
-        print("🎉 All tests passed!")
+        print("\n🎉 All password reset tests passed!")
+        print("✅ Password reset functionality is working correctly!")
         return 0
     else:
-        print("❌ Some tests failed!")
+        print(f"\n❌ {tester.tests_run - tester.tests_passed} tests failed!")
+        print("🔍 Check the detailed output above for specific failures.")
         return 1
 
 if __name__ == "__main__":

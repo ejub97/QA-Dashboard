@@ -4,7 +4,7 @@ import json
 import re
 from datetime import datetime
 
-class QADashboardAPITester:
+class QADashboardPostgreSQLTester:
     def __init__(self, base_url="https://testcenter.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
@@ -12,12 +12,12 @@ class QADashboardAPITester:
         self.tests_passed = 0
         self.project_id = None
         self.test_case_id = None
-        self.invite_code = None
         self.access_token = None
-        self.test_user_email = "testuser@example.com"
+        self.test_user_email = "pgtest@example.com"
         self.test_user_password = "TestPass123"
-        self.test_username = "testuser"
+        self.test_username = "pgtest"
         self.reset_token = None
+        self.failed_tests = []
 
     def run_test(self, name, method, endpoint, expected_status, data=None, params=None, headers=None):
         """Run a single API test"""

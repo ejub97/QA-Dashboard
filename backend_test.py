@@ -549,21 +549,24 @@ class QADashboardPostgreSQLTester:
         )
         return success and response.get('title') == update_data['title']
 
-    def test_update_test_case_status(self):
-        """Test updating test case status"""
+    def test_update_test_case(self):
+        """Test updating test case in PostgreSQL"""
         if not self.test_case_id:
             print("❌ Skipping - No test case ID available")
             return False
         
-        status_data = {"status": "success"}
+        update_data = {"status": "success"}
         success, response = self.run_test(
-            "Update Test Case Status",
-            "PATCH",
-            f"test-cases/{self.test_case_id}/status",
+            "Update Test Case Status (PostgreSQL)",
+            "PUT",
+            f"testcases/{self.test_case_id}",
             200,
-            data=status_data
+            data=update_data
         )
-        return success and response.get('status') == 'success'
+        if success and response.get('status') == 'success':
+            print(f"   ✅ Test case status updated to: {response.get('status')}")
+            return True
+        return False
 
     def test_export_csv(self):
         """Test CSV export"""

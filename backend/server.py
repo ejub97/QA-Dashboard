@@ -3,7 +3,6 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
@@ -16,6 +15,7 @@ from docx import Document
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 import pandas as pd
+import json
 from auth import (
     get_password_hash,
     verify_password,
@@ -28,29 +28,13 @@ from email_service import (
     get_token_expiry,
     send_password_reset_email
 )
+from database import get_db_pool, init_database, close_db_pool
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-# Configure SSL/TLS for cloud database connections
-if "mongodb+srv" in mongo_url:
-    import ssl
-    client = AsyncIOMotorClient(
-        mongo_url,
-        tls=True,
-        tlsAllowInvalidCertificates=True,  # For Emergent environment
-        serverSelectionTimeoutMS=10000,
-        connectTimeoutMS=10000
-    )
-else:
-    client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
-
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
-
 
 # ============ MODELS ============
 
@@ -61,33 +45,26 @@ class User(BaseModel):
     username: str
     email: EmailStr
     hashed_password: str
-    full_name: str
-    is_active: bool = True
+    role: str = "editor"  # editor or viewer
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    reset_token: Optional[str] = None
+    reset_token_expires: Optional[datetime] = None
 
 class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
-    full_name: str
 
 class UserResponse(BaseModel):
     id: str
     username: str
     email: str
-    full_name: str
-    is_active: bool
+    role: str
 
 class Token(BaseModel):
     access_token: str
     token_type: str
     user: UserResponse
-
-class ProjectMember(BaseModel):
-    user_id: str
-    username: str
-    role: str  # admin, editor, viewer
-    added_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class Project(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -95,31 +72,21 @@ class Project(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     description: Optional[str] = ""
-    owner_id: str
-    members: List[ProjectMember] = []
+    created_by: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    tabs: List[str] = ["General"]
 
 class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = ""
-
-class AddMemberRequest(BaseModel):
-    username: str
-    role: str  # admin, editor, viewer
-
-class Comment(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    text: str
-    created_by: str
-    user_id: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class TestCase(BaseModel):
     model_config = ConfigDict(extra="ignore")
     
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     project_id: str
-    tab: str = "General"
+    tab_section: str = "General"
     title: str
     description: str
     priority: str
@@ -128,17 +95,13 @@ class TestCase(BaseModel):
     expected_result: str
     actual_result: Optional[str] = ""
     status: str = "draft"
-    assigned_to: Optional[str] = ""
-    executed_at: Optional[datetime] = None
-    comments: List[Comment] = []
-    is_template: bool = False
-    created_by: str
+    created_by: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class TestCaseCreate(BaseModel):
     project_id: str
-    tab: Optional[str] = "General"
+    tab_section: Optional[str] = "General"
     title: str
     description: str
     priority: str
@@ -146,11 +109,8 @@ class TestCaseCreate(BaseModel):
     steps: str
     expected_result: str
     actual_result: Optional[str] = ""
-    assigned_to: Optional[str] = ""
-    is_template: Optional[bool] = False
 
 class TestCaseUpdate(BaseModel):
-    tab: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
     priority: Optional[str] = None
@@ -159,19 +119,14 @@ class TestCaseUpdate(BaseModel):
     expected_result: Optional[str] = None
     actual_result: Optional[str] = None
     status: Optional[str] = None
-    assigned_to: Optional[str] = None
-    executed_at: Optional[datetime] = None
+    tab_section: Optional[str] = None
 
-class StatusUpdate(BaseModel):
-    status: str
+class UpdateTabRequest(BaseModel):
+    old_name: str
+    new_name: str
 
-class BulkStatusUpdate(BaseModel):
-    test_case_ids: List[str]
-    status: str
-
-class CommentCreate(BaseModel):
-    test_case_id: str
-    text: str
+class DeleteTabRequest(BaseModel):
+    tab_name: str
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
@@ -180,750 +135,760 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
 
+class UpdateUserRoleRequest(BaseModel):
+    user_id: str
+    new_role: str
 
-# ============ AUTH DEPENDENCIES ============
+class Statistics(BaseModel):
+    total_projects: int
+    total_test_cases: int
+    draft_count: int
+    success_count: int
+    fail_count: int
+
+# ============ STARTUP & SHUTDOWN ============
+
+@app.on_event("startup")
+async def startup_event():
+    await init_database()
+    print("✅ Application started with PostgreSQL")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await close_db_pool()
+    print("👋 Application shutdown")
+
+# ============ HELPER FUNCTIONS ============
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    payload = decode_token(token)
-    if payload is None:
-        raise credentials_exception
-    
-    user_id: str = payload.get("sub")
-    if user_id is None:
-        raise credentials_exception
-    
-    user = await db.users.find_one({"id": user_id}, {"_id": 0})
-    if user is None:
-        raise credentials_exception
-    
-    if not user.get("is_active", False):
-        raise HTTPException(status_code=400, detail="Inactive user")
-    
-    return user
+    try:
+        payload = decode_token(token)
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            user_data = await conn.fetchrow(
+                'SELECT * FROM users WHERE id = $1',
+                user_id
+            )
+            
+            if not user_data:
+                raise HTTPException(status_code=401, detail="User not found")
+            
+            return dict(user_data)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-async def check_project_permission(project_id: str, user: dict, required_role: str = "viewer"):
-    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    # Owner has all permissions
-    if project["owner_id"] == user["id"]:
-        return project
-    
-    # Check if user is a member
-    member = next((m for m in project.get("members", []) if m["user_id"] == user["id"]), None)
-    if not member:
-        raise HTTPException(status_code=403, detail="You don't have access to this project")
-    
-    # Check role permissions
-    role_hierarchy = {"viewer": 0, "editor": 1, "admin": 2}
-    if role_hierarchy.get(member["role"], 0) < role_hierarchy.get(required_role, 0):
-        raise HTTPException(status_code=403, detail=f"You need {required_role} role for this action")
-    
-    return project
-
-
-# ============ AUTH ROUTES ============
+# ============ AUTHENTICATION ENDPOINTS ============
 
 @api_router.post("/auth/register", response_model=Token)
 async def register(user_data: UserCreate):
-    # Check if username exists
-    existing_user = await db.users.find_one({"username": user_data.username})
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-    
-    # Check if email exists
-    existing_email = await db.users.find_one({"email": user_data.email})
-    if existing_email:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Create user
-    hashed_password = get_password_hash(user_data.password)
-    user = User(
-        username=user_data.username,
-        email=user_data.email,
-        hashed_password=hashed_password,
-        full_name=user_data.full_name
-    )
-    
-    user_dict = user.model_dump()
-    user_dict['created_at'] = user_dict['created_at'].isoformat()
-    
-    await db.users.insert_one(user_dict)
-    
-    # Create access token
-    access_token = create_access_token(data={"sub": user.id})
-    
-    user_response = UserResponse(
-        id=user.id,
-        username=user.username,
-        email=user.email,
-        full_name=user.full_name,
-        is_active=user.is_active
-    )
-    
-    return Token(access_token=access_token, token_type="bearer", user=user_response)
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        # Check if user exists
+        existing = await conn.fetchrow(
+            'SELECT id FROM users WHERE email = $1 OR username = $2',
+            user_data.email, user_data.username
+        )
+        
+        if existing:
+            raise HTTPException(status_code=400, detail="User already exists")
+        
+        # Create new user
+        user_id = str(uuid.uuid4())
+        hashed_password = get_password_hash(user_data.password)
+        
+        await conn.execute(
+            '''INSERT INTO users (id, username, email, hashed_password, role)
+               VALUES ($1, $2, $3, $4, $5)''',
+            user_id, user_data.username, user_data.email, hashed_password, "editor"
+        )
+        
+        # Create access token
+        access_token = create_access_token(data={"sub": user_id})
+        
+        user_response = UserResponse(
+            id=user_id,
+            username=user_data.username,
+            email=user_data.email,
+            role="editor"
+        )
+        
+        return Token(access_token=access_token, token_type="bearer", user=user_response)
 
 @api_router.post("/auth/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = await db.users.find_one({"username": form_data.username}, {"_id": 0})
-    if not user or not verify_password(form_data.password, user["hashed_password"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        user_data = await conn.fetchrow(
+            'SELECT * FROM users WHERE username = $1',
+            form_data.username
         )
-    
-    if not user.get("is_active", False):
-        raise HTTPException(status_code=400, detail="Inactive user")
-    
-    access_token = create_access_token(data={"sub": user["id"]})
-    
-    user_response = UserResponse(
-        id=user["id"],
-        username=user["username"],
-        email=user["email"],
-        full_name=user["full_name"],
-        is_active=user["is_active"]
-    )
-    
-    return Token(access_token=access_token, token_type="bearer", user=user_response)
+        
+        if not user_data or not verify_password(form_data.password, user_data['hashed_password']):
+            raise HTTPException(status_code=401, detail="Incorrect username or password")
+        
+        access_token = create_access_token(data={"sub": user_data['id']})
+        
+        user_response = UserResponse(
+            id=user_data['id'],
+            username=user_data['username'],
+            email=user_data['email'],
+            role=user_data['role']
+        )
+        
+        return Token(access_token=access_token, token_type="bearer", user=user_response)
 
 @api_router.get("/auth/me", response_model=UserResponse)
 async def get_me(current_user: dict = Depends(get_current_user)):
     return UserResponse(
-        id=current_user["id"],
-        username=current_user["username"],
-        email=current_user["email"],
-        full_name=current_user["full_name"],
-        is_active=current_user["is_active"]
+        id=current_user['id'],
+        username=current_user['username'],
+        email=current_user['email'],
+        role=current_user['role']
     )
 
 @api_router.post("/auth/forgot-password")
 async def forgot_password(request: ForgotPasswordRequest):
-    """Request password reset email"""
-    user = await db.users.find_one({"email": request.email}, {"_id": 0})
-    
-    # Always return success to prevent email enumeration
-    if not user:
-        return {"message": "If an account with that email exists, a password reset link has been sent."}
-    
-    # Generate reset token
-    reset_token = generate_reset_token()
-    token_expiry = get_token_expiry()
-    
-    # Store reset token in database
-    await db.users.update_one(
-        {"email": request.email},
-        {
-            "$set": {
-                "reset_token": reset_token,
-                "reset_token_expiry": token_expiry.isoformat()
-            }
-        }
-    )
-    
-    # Send email
-    await send_password_reset_email(request.email, reset_token, user["username"])
-    
-    return {"message": "If an account with that email exists, a password reset link has been sent."}
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow(
+            'SELECT * FROM users WHERE email = $1',
+            request.email
+        )
+        
+        # Always return success for security (don't reveal if email exists)
+        if not user:
+            return {"message": "If the email exists, a password reset link has been sent"}
+        
+        # Generate reset token
+        reset_token = generate_reset_token()
+        token_expiry = get_token_expiry()
+        
+        # Save token to database
+        await conn.execute(
+            'UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3',
+            reset_token, token_expiry, user['id']
+        )
+        
+        # Send email
+        await send_password_reset_email(user['email'], reset_token, user['username'])
+        
+        return {"message": "If the email exists, a password reset link has been sent"}
 
 @api_router.post("/auth/reset-password")
 async def reset_password(request: ResetPasswordRequest):
-    """Reset password using token"""
-    # Find user with valid token
-    user = await db.users.find_one({
-        "reset_token": request.token
-    }, {"_id": 0})
-    
-    if not user:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
-    
-    # Check if token is expired
-    token_expiry = datetime.fromisoformat(user["reset_token_expiry"])
-    if datetime.now(timezone.utc) > token_expiry:
-        raise HTTPException(status_code=400, detail="Reset token has expired")
-    
-    # Validate new password
     if len(request.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     
-    # Update password and clear reset token
-    hashed_password = get_password_hash(request.new_password)
-    await db.users.update_one(
-        {"id": user["id"]},
-        {
-            "$set": {
-                "hashed_password": hashed_password
-            },
-            "$unset": {
-                "reset_token": "",
-                "reset_token_expiry": ""
-            }
-        }
-    )
-    
-    return {"message": "Password has been reset successfully. You can now login with your new password."}
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow(
+            'SELECT * FROM users WHERE reset_token = $1',
+            request.token
+        )
+        
+        if not user:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+        
+        # Check if token is expired
+        if user['reset_token_expires'] < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Reset token has expired")
+        
+        # Update password and clear reset token
+        new_hashed_password = get_password_hash(request.new_password)
+        await conn.execute(
+            'UPDATE users SET hashed_password = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2',
+            new_hashed_password, user['id']
+        )
+        
+        return {"message": "Password reset successful"}
 
+# ============ USER MANAGEMENT ENDPOINTS ============
 
-# ============ PROJECT ROUTES ============
+@api_router.get("/users", response_model=List[UserResponse])
+async def get_users(current_user: dict = Depends(get_current_user)):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        users = await conn.fetch('SELECT * FROM users ORDER BY created_at DESC')
+        
+        return [
+            UserResponse(
+                id=u['id'],
+                username=u['username'],
+                email=u['email'],
+                role=u['role']
+            )
+            for u in users
+        ]
 
-@api_router.post("/projects", response_model=Project)
-async def create_project(input: ProjectCreate, current_user: dict = Depends(get_current_user)):
-    project = Project(
-        name=input.name,
-        description=input.description,
-        owner_id=current_user["id"],
-        members=[]
-    )
+@api_router.put("/users/role")
+async def update_user_role(
+    request: UpdateUserRoleRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    if request.new_role not in ["editor", "viewer"]:
+        raise HTTPException(status_code=400, detail="Invalid role")
     
-    doc = project.model_dump()
-    doc['created_at'] = doc['created_at'].isoformat()
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            'UPDATE users SET role = $1 WHERE id = $2',
+            request.new_role, request.user_id
+        )
+        
+        return {"message": "User role updated successfully"}
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    if user_id == current_user['id']:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
     
-    await db.projects.insert_one(doc)
-    return project
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute('DELETE FROM users WHERE id = $1', user_id)
+        
+        if result == "DELETE 0":
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {"message": "User deleted successfully"}
+
+# ============ PROJECT ENDPOINTS ============
 
 @api_router.get("/projects", response_model=List[Project])
 async def get_projects(current_user: dict = Depends(get_current_user)):
-    # Get projects where user is owner or member
-    projects = await db.projects.find({
-        "$or": [
-            {"owner_id": current_user["id"]},
-            {"members.user_id": current_user["id"]}
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        projects = await conn.fetch(
+            'SELECT * FROM projects ORDER BY created_at DESC'
+        )
+        
+        return [
+            Project(
+                id=p['id'],
+                name=p['name'],
+                description=p['description'] or "",
+                created_by=p['created_by'],
+                created_at=p['created_at'],
+                updated_at=p['updated_at'],
+                tabs=json.loads(p['tabs']) if isinstance(p['tabs'], str) else p['tabs']
+            )
+            for p in projects
         ]
-    }, {"_id": 0}).to_list(1000)
-    
-    for project in projects:
-        if isinstance(project['created_at'], str):
-            project['created_at'] = datetime.fromisoformat(project['created_at'])
-    
-    return projects
 
-@api_router.get("/projects/{project_id}", response_model=Project)
-async def get_project(project_id: str, current_user: dict = Depends(get_current_user)):
-    project = await check_project_permission(project_id, current_user, "viewer")
-    
-    if isinstance(project['created_at'], str):
-        project['created_at'] = datetime.fromisoformat(project['created_at'])
-    
-    return project
+@api_router.post("/projects", response_model=Project)
+async def create_project(
+    project_data: ProjectCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        project_id = str(uuid.uuid4())
+        
+        await conn.execute(
+            '''INSERT INTO projects (id, name, description, created_by, tabs)
+               VALUES ($1, $2, $3, $4, $5)''',
+            project_id, project_data.name, project_data.description or "",
+            current_user['id'], json.dumps(["General"])
+        )
+        
+        # Fetch the created project to get the actual timestamps
+        created_project = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
+        
+        return Project(
+            id=project_id,
+            name=project_data.name,
+            description=project_data.description or "",
+            created_by=current_user['id'],
+            created_at=created_project['created_at'],
+            updated_at=created_project['updated_at'],
+            tabs=["General"]
+        )
 
 @api_router.delete("/projects/{project_id}")
-async def delete_project(project_id: str, current_user: dict = Depends(get_current_user)):
-    project = await db.projects.find_one({"id": project_id})
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    # Only owner can delete
-    if project["owner_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Only project owner can delete the project")
-    
-    await db.test_cases.delete_many({"project_id": project_id})
-    await db.projects.delete_one({"id": project_id})
-    
-    return {"message": "Project deleted successfully"}
-
-@api_router.post("/projects/{project_id}/members")
-async def add_project_member(
+async def delete_project(
     project_id: str,
-    member_data: AddMemberRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    project = await check_project_permission(project_id, current_user, "admin")
-    
-    # Find user by username
-    user = await db.users.find_one({"username": member_data.username}, {"_id": 0})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Check if already a member
-    if any(m["user_id"] == user["id"] for m in project.get("members", [])):
-        raise HTTPException(status_code=400, detail="User is already a member")
-    
-    # Add member
-    member = ProjectMember(
-        user_id=user["id"],
-        username=user["username"],
-        role=member_data.role
-    )
-    
-    member_dict = member.model_dump()
-    member_dict['added_at'] = member_dict['added_at'].isoformat()
-    
-    await db.projects.update_one(
-        {"id": project_id},
-        {"$push": {"members": member_dict}}
-    )
-    
-    return {"message": f"User {member_data.username} added as {member_data.role}"}
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute('DELETE FROM projects WHERE id = $1', project_id)
+        
+        if result == "DELETE 0":
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        return {"message": "Project deleted successfully"}
 
-@api_router.put("/projects/{project_id}/members/{user_id}/role")
-async def update_member_role(
+@api_router.post("/projects/{project_id}/tabs")
+async def add_tab_to_project(
     project_id: str,
-    user_id: str,
-    role: str,
+    tab_name: str,
     current_user: dict = Depends(get_current_user)
 ):
-    project = await check_project_permission(project_id, current_user, "admin")
-    
-    await db.projects.update_one(
-        {"id": project_id, "members.user_id": user_id},
-        {"$set": {"members.$.role": role}}
-    )
-    
-    return {"message": "Role updated successfully"}
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        project = await conn.fetchrow('SELECT tabs FROM projects WHERE id = $1', project_id)
+        
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        tabs = json.loads(project['tabs']) if isinstance(project['tabs'], str) else project['tabs']
+        
+        if tab_name in tabs:
+            raise HTTPException(status_code=400, detail="Tab already exists")
+        
+        tabs.append(tab_name)
+        
+        await conn.execute(
+            'UPDATE projects SET tabs = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            json.dumps(tabs), project_id
+        )
+        
+        return {"message": "Tab added successfully", "tabs": tabs}
 
-@api_router.delete("/projects/{project_id}/members/{user_id}")
-async def remove_project_member(
+@api_router.put("/projects/{project_id}/tabs")
+async def rename_tab(
     project_id: str,
-    user_id: str,
+    request: UpdateTabRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    project = await check_project_permission(project_id, current_user, "admin")
-    
-    await db.projects.update_one(
-        {"id": project_id},
-        {"$pull": {"members": {"user_id": user_id}}}
-    )
-    
-    return {"message": "Member removed successfully"}
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        project = await conn.fetchrow('SELECT tabs FROM projects WHERE id = $1', project_id)
+        
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        tabs = json.loads(project['tabs']) if isinstance(project['tabs'], str) else project['tabs']
+        
+        if request.old_name not in tabs:
+            raise HTTPException(status_code=404, detail="Tab not found")
+        
+        if request.new_name in tabs:
+            raise HTTPException(status_code=400, detail="New tab name already exists")
+        
+        # Update tab name in tabs list
+        tabs = [request.new_name if t == request.old_name else t for t in tabs]
+        
+        # Update project tabs
+        await conn.execute(
+            'UPDATE projects SET tabs = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            json.dumps(tabs), project_id
+        )
+        
+        # Update test cases with this tab
+        await conn.execute(
+            'UPDATE test_cases SET tab_section = $1 WHERE project_id = $2 AND tab_section = $3',
+            request.new_name, project_id, request.old_name
+        )
+        
+        return {"message": "Tab renamed successfully", "tabs": tabs}
 
-@api_router.get("/projects/{project_id}/tabs")
-async def get_project_tabs(project_id: str, current_user: dict = Depends(get_current_user)):
-    await check_project_permission(project_id, current_user, "viewer")
+@api_router.delete("/projects/{project_id}/tabs")
+async def delete_tab(
+    project_id: str,
+    request: DeleteTabRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    if request.tab_name == "General":
+        raise HTTPException(status_code=400, detail="Cannot delete General tab")
     
-    test_cases = await db.test_cases.find({"project_id": project_id}, {"_id": 0, "tab": 1}).to_list(1000)
-    tabs = list(set([tc.get('tab', 'General') for tc in test_cases]))
-    if not tabs:
-        tabs = ["General"]
-    return {"tabs": sorted(tabs)}
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        project = await conn.fetchrow('SELECT tabs FROM projects WHERE id = $1', project_id)
+        
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        tabs = json.loads(project['tabs']) if isinstance(project['tabs'], str) else project['tabs']
+        
+        if request.tab_name not in tabs:
+            raise HTTPException(status_code=404, detail="Tab not found")
+        
+        # Remove tab from list
+        tabs.remove(request.tab_name)
+        
+        # Update project
+        await conn.execute(
+            'UPDATE projects SET tabs = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            json.dumps(tabs), project_id
+        )
+        
+        # Delete test cases in this tab
+        await conn.execute(
+            'DELETE FROM test_cases WHERE project_id = $1 AND tab_section = $2',
+            project_id, request.tab_name
+        )
+        
+        return {"message": "Tab deleted successfully", "tabs": tabs}
 
-@api_router.get("/projects/{project_id}/statistics")
-async def get_project_statistics(project_id: str, current_user: dict = Depends(get_current_user)):
-    await check_project_permission(project_id, current_user, "viewer")
-    
-    test_cases = await db.test_cases.find({"project_id": project_id, "is_template": False}, {"_id": 0}).to_list(1000)
-    
-    stats = {
-        "total": len(test_cases),
-        "draft": len([tc for tc in test_cases if tc.get('status') == 'draft']),
-        "success": len([tc for tc in test_cases if tc.get('status') == 'success']),
-        "fail": len([tc for tc in test_cases if tc.get('status') == 'fail']),
-        "by_priority": {
-            "low": len([tc for tc in test_cases if tc.get('priority') == 'low']),
-            "medium": len([tc for tc in test_cases if tc.get('priority') == 'medium']),
-            "high": len([tc for tc in test_cases if tc.get('priority') == 'high'])
-        },
-        "by_tab": {}
-    }
-    
-    for tc in test_cases:
-        tab = tc.get('tab', 'General')
-        if tab not in stats["by_tab"]:
-            stats["by_tab"][tab] = {"total": 0, "draft": 0, "success": 0, "fail": 0}
-        stats["by_tab"][tab]["total"] += 1
-        stats["by_tab"][tab][tc.get('status', 'draft')] += 1
-    
-    return stats
+# ============ TEST CASE ENDPOINTS ============
 
-
-# ============ TEST CASE ROUTES ============
-
-@api_router.post("/test-cases", response_model=TestCase)
-async def create_test_case(input: TestCaseCreate, current_user: dict = Depends(get_current_user)):
-    await check_project_permission(input.project_id, current_user, "editor")
-    
-    test_case = TestCase(
-        **input.model_dump(),
-        created_by=current_user["username"]
-    )
-    
-    doc = test_case.model_dump()
-    doc['created_at'] = doc['created_at'].isoformat()
-    doc['updated_at'] = doc['updated_at'].isoformat()
-    if doc.get('executed_at'):
-        doc['executed_at'] = doc['executed_at'].isoformat()
-    
-    await db.test_cases.insert_one(doc)
-    return test_case
-
-@api_router.get("/test-cases", response_model=List[TestCase])
+@api_router.get("/testcases/{project_id}", response_model=List[TestCase])
 async def get_test_cases(
-    project_id: Optional[str] = None,
-    tab: Optional[str] = None,
-    is_template: Optional[bool] = None,
-    search: Optional[str] = None,
+    project_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    if project_id:
-        await check_project_permission(project_id, current_user, "viewer")
-    
-    query = {}
-    if project_id:
-        query["project_id"] = project_id
-    if tab:
-        query["tab"] = tab
-    if is_template is not None:
-        query["is_template"] = is_template
-    
-    test_cases = await db.test_cases.find(query, {"_id": 0}).to_list(1000)
-    
-    for tc in test_cases:
-        if isinstance(tc['created_at'], str):
-            tc['created_at'] = datetime.fromisoformat(tc['created_at'])
-        if isinstance(tc['updated_at'], str):
-            tc['updated_at'] = datetime.fromisoformat(tc['updated_at'])
-        if tc.get('executed_at') and isinstance(tc['executed_at'], str):
-            tc['executed_at'] = datetime.fromisoformat(tc['executed_at'])
-    
-    if search:
-        search_lower = search.lower()
-        test_cases = [tc for tc in test_cases if 
-                      search_lower in tc.get('title', '').lower() or 
-                      search_lower in tc.get('description', '').lower() or
-                      search_lower in tc.get('steps', '').lower()]
-    
-    return test_cases
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        test_cases = await conn.fetch(
+            'SELECT * FROM test_cases WHERE project_id = $1 ORDER BY created_at DESC',
+            project_id
+        )
+        
+        return [
+            TestCase(
+                id=tc['id'],
+                project_id=tc['project_id'],
+                tab_section=tc['tab_section'],
+                title=tc['title'],
+                description=tc['description'],
+                priority=tc['priority'],
+                type=tc['type'],
+                steps=tc['steps'],
+                expected_result=tc['expected_result'],
+                actual_result=tc['actual_result'] or "",
+                status=tc['status'],
+                created_by=tc['created_by'],
+                created_at=tc['created_at'],
+                updated_at=tc['updated_at']
+            )
+            for tc in test_cases
+        ]
 
-@api_router.post("/test-cases/{test_case_id}/duplicate", response_model=TestCase)
-async def duplicate_test_case(test_case_id: str, current_user: dict = Depends(get_current_user)):
-    test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
-    if not test_case:
-        raise HTTPException(status_code=404, detail="Test case not found")
-    
-    await check_project_permission(test_case['project_id'], current_user, "editor")
-    
-    new_tc = TestCase(**test_case)
-    new_tc.id = str(uuid.uuid4())
-    new_tc.title = f"{test_case['title']} (Copy)"
-    new_tc.created_at = datetime.now(timezone.utc)
-    new_tc.updated_at = datetime.now(timezone.utc)
-    new_tc.comments = []
-    new_tc.created_by = current_user["username"]
-    
-    doc = new_tc.model_dump()
-    doc['created_at'] = doc['created_at'].isoformat()
-    doc['updated_at'] = doc['updated_at'].isoformat()
-    if doc.get('executed_at'):
-        doc['executed_at'] = doc['executed_at'].isoformat()
-    
-    await db.test_cases.insert_one(doc)
-    return new_tc
+@api_router.post("/testcases", response_model=TestCase)
+async def create_test_case(
+    test_case_data: TestCaseCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        tc_id = str(uuid.uuid4())
+        
+        await conn.execute(
+            '''INSERT INTO test_cases (
+                id, project_id, tab_section, title, description, priority, type,
+                steps, expected_result, actual_result, status, created_by
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)''',
+            tc_id, test_case_data.project_id, test_case_data.tab_section or "General",
+            test_case_data.title, test_case_data.description, test_case_data.priority,
+            test_case_data.type, test_case_data.steps, test_case_data.expected_result,
+            test_case_data.actual_result or "", "draft", current_user['id']
+        )
+        
+        # Fetch the created test case to get the actual timestamps
+        created_tc = await conn.fetchrow('SELECT * FROM test_cases WHERE id = $1', tc_id)
+        
+        return TestCase(
+            id=tc_id,
+            project_id=test_case_data.project_id,
+            tab_section=test_case_data.tab_section or "General",
+            title=test_case_data.title,
+            description=test_case_data.description,
+            priority=test_case_data.priority,
+            type=test_case_data.type,
+            steps=test_case_data.steps,
+            expected_result=test_case_data.expected_result,
+            actual_result=test_case_data.actual_result or "",
+            status="draft",
+            created_by=current_user['id'],
+            created_at=created_tc['created_at'],
+            updated_at=created_tc['updated_at']
+        )
 
-@api_router.put("/test-cases/{test_case_id}", response_model=TestCase)
+@api_router.put("/testcases/{test_case_id}", response_model=TestCase)
 async def update_test_case(
     test_case_id: str,
-    input: TestCaseUpdate,
+    test_case_data: TestCaseUpdate,
     current_user: dict = Depends(get_current_user)
 ):
-    test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
-    if not test_case:
-        raise HTTPException(status_code=404, detail="Test case not found")
-    
-    await check_project_permission(test_case['project_id'], current_user, "editor")
-    
-    update_data = {k: v for k, v in input.model_dump().items() if v is not None}
-    update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
-    
-    if 'executed_at' in update_data and update_data['executed_at']:
-        update_data['executed_at'] = update_data['executed_at'].isoformat()
-    
-    await db.test_cases.update_one(
-        {"id": test_case_id},
-        {"$set": update_data}
-    )
-    
-    updated_test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
-    
-    if isinstance(updated_test_case['created_at'], str):
-        updated_test_case['created_at'] = datetime.fromisoformat(updated_test_case['created_at'])
-    if isinstance(updated_test_case['updated_at'], str):
-        updated_test_case['updated_at'] = datetime.fromisoformat(updated_test_case['updated_at'])
-    if updated_test_case.get('executed_at') and isinstance(updated_test_case['executed_at'], str):
-        updated_test_case['executed_at'] = datetime.fromisoformat(updated_test_case['executed_at'])
-    
-    return updated_test_case
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        # Get existing test case
+        existing = await conn.fetchrow(
+            'SELECT * FROM test_cases WHERE id = $1',
+            test_case_id
+        )
+        
+        if not existing:
+            raise HTTPException(status_code=404, detail="Test case not found")
+        
+        # Build update query dynamically
+        update_fields = []
+        values = []
+        param_count = 1
+        
+        for field, value in test_case_data.dict(exclude_unset=True).items():
+            if value is not None:
+                update_fields.append(f"{field} = ${param_count}")
+                values.append(value)
+                param_count += 1
+        
+        if update_fields:
+            update_fields.append(f"updated_at = CURRENT_TIMESTAMP")
+            values.append(test_case_id)
+            
+            query = f"UPDATE test_cases SET {', '.join(update_fields)} WHERE id = ${param_count}"
+            await conn.execute(query, *values)
+        
+        # Fetch updated test case
+        updated = await conn.fetchrow('SELECT * FROM test_cases WHERE id = $1', test_case_id)
+        
+        return TestCase(
+            id=updated['id'],
+            project_id=updated['project_id'],
+            tab_section=updated['tab_section'],
+            title=updated['title'],
+            description=updated['description'],
+            priority=updated['priority'],
+            type=updated['type'],
+            steps=updated['steps'],
+            expected_result=updated['expected_result'],
+            actual_result=updated['actual_result'] or "",
+            status=updated['status'],
+            created_by=updated['created_by'],
+            created_at=updated['created_at'],
+            updated_at=updated['updated_at']
+        )
 
-@api_router.patch("/test-cases/{test_case_id}/status", response_model=TestCase)
-async def update_test_case_status(
+@api_router.delete("/testcases/{test_case_id}")
+async def delete_test_case(
     test_case_id: str,
-    input: StatusUpdate,
     current_user: dict = Depends(get_current_user)
 ):
-    test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
-    if not test_case:
-        raise HTTPException(status_code=404, detail="Test case not found")
-    
-    await check_project_permission(test_case['project_id'], current_user, "editor")
-    
-    update_data = {
-        "status": input.status,
-        "updated_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    if input.status in ['success', 'fail']:
-        update_data['executed_at'] = datetime.now(timezone.utc).isoformat()
-    
-    await db.test_cases.update_one(
-        {"id": test_case_id},
-        {"$set": update_data}
-    )
-    
-    updated_test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
-    
-    if isinstance(updated_test_case['created_at'], str):
-        updated_test_case['created_at'] = datetime.fromisoformat(updated_test_case['created_at'])
-    if isinstance(updated_test_case['updated_at'], str):
-        updated_test_case['updated_at'] = datetime.fromisoformat(updated_test_case['updated_at'])
-    if updated_test_case.get('executed_at') and isinstance(updated_test_case['executed_at'], str):
-        updated_test_case['executed_at'] = datetime.fromisoformat(updated_test_case['executed_at'])
-    
-    return updated_test_case
-
-@api_router.post("/test-cases/bulk-status")
-async def bulk_update_status(input: BulkStatusUpdate, current_user: dict = Depends(get_current_user)):
-    # Verify all test cases belong to projects user has access to
-    test_cases = await db.test_cases.find({"id": {"$in": input.test_case_ids}}, {"_id": 0, "project_id": 1}).to_list(1000)
-    
-    for tc in test_cases:
-        await check_project_permission(tc['project_id'], current_user, "editor")
-    
-    update_data = {
-        "status": input.status,
-        "updated_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    if input.status in ['success', 'fail']:
-        update_data['executed_at'] = datetime.now(timezone.utc).isoformat()
-    
-    result = await db.test_cases.update_many(
-        {"id": {"$in": input.test_case_ids}},
-        {"$set": update_data}
-    )
-    
-    return {"updated_count": result.modified_count}
-
-@api_router.delete("/test-cases/bulk")
-async def bulk_delete_test_cases(test_case_ids: List[str], current_user: dict = Depends(get_current_user)):
-    test_cases = await db.test_cases.find({"id": {"$in": test_case_ids}}, {"_id": 0, "project_id": 1}).to_list(1000)
-    
-    for tc in test_cases:
-        await check_project_permission(tc['project_id'], current_user, "editor")
-    
-    result = await db.test_cases.delete_many({"id": {"$in": test_case_ids}})
-    return {"deleted_count": result.deleted_count}
-
-@api_router.delete("/test-cases/{test_case_id}")
-async def delete_test_case(test_case_id: str, current_user: dict = Depends(get_current_user)):
-    test_case = await db.test_cases.find_one({"id": test_case_id}, {"_id": 0})
-    if not test_case:
-        raise HTTPException(status_code=404, detail="Test case not found")
-    
-    await check_project_permission(test_case['project_id'], current_user, "editor")
-    
-    await db.test_cases.delete_one({"id": test_case_id})
-    return {"message": "Test case deleted successfully"}
-
-@api_router.post("/test-cases/{test_case_id}/comments", response_model=Comment)
-async def add_comment(
-    test_case_id: str,
-    input: CommentCreate,
-    current_user: dict = Depends(get_current_user)
-):
-    test_case = await db.test_cases.find_one({"id": test_case_id})
-    if not test_case:
-        raise HTTPException(status_code=404, detail="Test case not found")
-    
-    await check_project_permission(test_case['project_id'], current_user, "viewer")
-    
-    comment = Comment(
-        text=input.text,
-        created_by=current_user["username"],
-        user_id=current_user["id"]
-    )
-    comment_dict = comment.model_dump()
-    comment_dict['created_at'] = comment_dict['created_at'].isoformat()
-    
-    await db.test_cases.update_one(
-        {"id": test_case_id},
-        {"$push": {"comments": comment_dict}}
-    )
-    
-    return comment
-
-
-# ============ EXPORT ROUTES (Viewer can access) ============
-
-@api_router.get("/test-cases/export/excel/{project_id}")
-async def export_excel(project_id: str, current_user: dict = Depends(get_current_user)):
-    project = await check_project_permission(project_id, current_user, "viewer")
-    
-    test_cases = await db.test_cases.find({"project_id": project_id, "is_template": False}, {"_id": 0}).to_list(1000)
-    
-    tabs_dict = {}
-    for tc in test_cases:
-        tab = tc.get('tab', 'General')
-        if tab not in tabs_dict:
-            tabs_dict[tab] = []
-        tabs_dict[tab].append(tc)
-    
-    for tab in tabs_dict:
-        tabs_dict[tab].sort(key=lambda x: x.get('created_at', ''))
-    
-    wb = Workbook()
-    wb.remove(wb.active)
-    
-    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF")
-    header_alignment = Alignment(horizontal="center", vertical="center")
-    data_alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-    
-    global_counter = 1
-    for tab_name in sorted(tabs_dict.keys()):
-        safe_sheet_name = tab_name[:31].replace('/', '-').replace('\\', '-').replace('*', '').replace('?', '').replace('[', '').replace(']', '')
-        ws = wb.create_sheet(title=safe_sheet_name)
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute('DELETE FROM test_cases WHERE id = $1', test_case_id)
         
-        headers = ['TC ID', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status', 'Assigned To', 'Executed At']
-        ws.append(headers)
+        if result == "DELETE 0":
+            raise HTTPException(status_code=404, detail="Test case not found")
         
-        for cell in ws[1]:
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = header_alignment
+        return {"message": "Test case deleted successfully"}
+
+# ============ EXPORT ENDPOINTS ============
+
+def format_steps(steps_text):
+    """Format steps with numbers for export"""
+    if not steps_text:
+        return []
+    
+    lines = steps_text.split('\n')
+    formatted_steps = []
+    for i, line in enumerate(lines, 1):
+        line = line.strip()
+        if line:
+            if not line[0].isdigit():
+                formatted_steps.append(f"{i}. {line}")
+            else:
+                formatted_steps.append(line)
+    return formatted_steps
+
+@api_router.get("/export/word/{project_id}")
+async def export_to_word(project_id: str, current_user: dict = Depends(get_current_user)):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        # Get project
+        project = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
         
-        for tc in tabs_dict[tab_name]:
-            tc_id = f"TC{str(global_counter).zfill(3)}"
-            global_counter += 1
+        # Get test cases
+        test_cases = await conn.fetch(
+            'SELECT * FROM test_cases WHERE project_id = $1 ORDER BY created_at',
+            project_id
+        )
+        
+        if not test_cases:
+            raise HTTPException(status_code=404, detail="No test cases found")
+        
+        # Create Word document
+        doc = Document()
+        doc.add_heading(f"Test Cases - {project['name']}", 0)
+        
+        for idx, tc in enumerate(test_cases, 1):
+            doc.add_heading(f"TC{idx:03d}: {tc['title']}", level=1)
             
-            executed_at = ''
-            if tc.get('executed_at'):
-                if isinstance(tc['executed_at'], str):
-                    executed_at = tc['executed_at'].split('T')[0]
-                else:
-                    executed_at = tc['executed_at'].strftime('%Y-%m-%d')
+            table = doc.add_table(rows=8, cols=2)
+            table.style = 'Table Grid'
             
-            row_data = [
-                tc_id,
-                tc.get('title', ''),
-                tc.get('description', ''),
-                tc.get('priority', ''),
-                tc.get('type', ''),
-                tc.get('steps', ''),
-                tc.get('expected_result', ''),
-                tc.get('actual_result', ''),
-                tc.get('status', ''),
-                tc.get('assigned_to', ''),
-                executed_at
-            ]
-            ws.append(row_data)
+            table.rows[0].cells[0].text = "TC ID"
+            table.rows[0].cells[1].text = f"TC{idx:03d}"
             
-            current_row = ws.max_row
-            for cell in ws[current_row]:
-                cell.alignment = data_alignment
+            table.rows[1].cells[0].text = "Title"
+            table.rows[1].cells[1].text = tc['title']
+            
+            table.rows[2].cells[0].text = "Description"
+            table.rows[2].cells[1].text = tc['description']
+            
+            table.rows[3].cells[0].text = "Priority"
+            table.rows[3].cells[1].text = tc['priority']
+            
+            table.rows[4].cells[0].text = "Type"
+            table.rows[4].cells[1].text = tc['type']
+            
+            table.rows[5].cells[0].text = "Steps"
+            formatted_steps = format_steps(tc['steps'])
+            table.rows[5].cells[1].text = '\n'.join(formatted_steps)
+            
+            table.rows[6].cells[0].text = "Expected Result"
+            table.rows[6].cells[1].text = tc['expected_result']
+            
+            table.rows[7].cells[0].text = "Actual Result"
+            table.rows[7].cells[1].text = tc['actual_result'] or ""
+            
+            doc.add_paragraph()
         
-        for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-            ws.row_dimensions[row[0].row].height = None
+        # Save to bytes
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
         
-        ws.column_dimensions['A'].width = 10
-        ws.column_dimensions['B'].width = 25
-        ws.column_dimensions['C'].width = 30
-        ws.column_dimensions['D'].width = 12
-        ws.column_dimensions['E'].width = 15
-        ws.column_dimensions['F'].width = 35
-        ws.column_dimensions['G'].width = 35
-        ws.column_dimensions['H'].width = 35
-        ws.column_dimensions['I'].width = 12
-        ws.column_dimensions['J'].width = 15
-        ws.column_dimensions['K'].width = 15
-    
-    if not tabs_dict:
-        ws = wb.create_sheet(title="General")
-        headers = ['TC ID', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result', 'Status', 'Assigned To', 'Executed At']
-        ws.append(headers)
-        for cell in ws[1]:
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = header_alignment
-    
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    
-    return StreamingResponse(
-        output,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={project['name']}_test_cases.xlsx"}
-    )
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f"attachment; filename=test_cases_{project['name']}.docx"}
+        )
 
-@api_router.get("/test-cases/export/docx/{project_id}")
-async def export_docx(project_id: str, current_user: dict = Depends(get_current_user)):
-    project = await check_project_permission(project_id, current_user, "viewer")
-    
-    test_cases = await db.test_cases.find({"project_id": project_id, "is_template": False}, {"_id": 0}).to_list(1000)
-    test_cases.sort(key=lambda x: (x.get('tab', 'General'), x.get('created_at', '')))
-    
-    doc = Document()
-    
-    title = doc.add_heading(f"{project['name']} - Test Cases", 0)
-    title.alignment = 1  # Center
-    
-    table = doc.add_table(rows=1, cols=9)
-    table.style = 'Light Grid Accent 1'
-    
-    hdr_cells = table.rows[0].cells
-    headers = ['TC ID', 'Tab', 'Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result', 'Actual Result']
-    for i, header in enumerate(headers):
-        hdr_cells[i].text = header
-        for paragraph in hdr_cells[i].paragraphs:
-            for run in paragraph.runs:
-                run.font.bold = True
-    
-    for idx, tc in enumerate(test_cases, start=1):
-        tc_id = f"TC{str(idx).zfill(3)}"
-        row_cells = table.add_row().cells
-        row_cells[0].text = tc_id
-        row_cells[1].text = tc.get('tab', 'General')
-        row_cells[2].text = tc.get('title', '')
-        row_cells[3].text = tc.get('description', '')
-        row_cells[4].text = tc.get('priority', '')
-        row_cells[5].text = tc.get('type', '')
-        row_cells[6].text = tc.get('steps', '')
-        row_cells[7].text = tc.get('expected_result', '')
-        row_cells[8].text = tc.get('actual_result', '')
-    
-    output = io.BytesIO()
-    doc.save(output)
-    output.seek(0)
-    
-    return StreamingResponse(
-        output,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f"attachment; filename={project['name']}_test_cases.docx"}
-    )
+@api_router.get("/export/excel/{project_id}")
+async def export_to_excel(project_id: str, current_user: dict = Depends(get_current_user)):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        # Get project
+        project = await conn.fetchrow('SELECT * FROM projects WHERE id = $1', project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        tabs = json.loads(project['tabs']) if isinstance(project['tabs'], str) else project['tabs']
+        
+        # Get test cases
+        test_cases = await conn.fetch(
+            'SELECT * FROM test_cases WHERE project_id = $1 ORDER BY created_at',
+            project_id
+        )
+        
+        if not test_cases:
+            raise HTTPException(status_code=404, detail="No test cases found")
+        
+        # Create Excel workbook
+        wb = Workbook()
+        wb.remove(wb.active)
+        
+        # Group test cases by tab
+        test_cases_by_tab = {}
+        for tc in test_cases:
+            tab = tc['tab_section'] or 'General'
+            if tab not in test_cases_by_tab:
+                test_cases_by_tab[tab] = []
+            test_cases_by_tab[tab].append(tc)
+        
+        # Create a sheet for each tab
+        tc_counter = 1
+        for tab_name in tabs:
+            if tab_name not in test_cases_by_tab:
+                continue
+            
+            ws = wb.create_sheet(title=tab_name[:31])
+            
+            # Header row
+            headers = ["TC ID", "Title", "Description", "Priority", "Type", "Steps", 
+                      "Expected Result", "Actual Result", "Status"]
+            ws.append(headers)
+            
+            # Style header
+            for cell in ws[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            # Data rows
+            for tc in test_cases_by_tab[tab_name]:
+                formatted_steps = '\n'.join(format_steps(tc['steps']))
+                
+                ws.append([
+                    f"TC{tc_counter:03d}",
+                    tc['title'],
+                    tc['description'],
+                    tc['priority'],
+                    tc['type'],
+                    formatted_steps,
+                    tc['expected_result'],
+                    tc['actual_result'] or "",
+                    tc['status']
+                ])
+                tc_counter += 1
+            
+            # Auto-adjust column widths
+            for column in ws.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(cell.value)
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)
+                ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Save to bytes
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=test_cases_{project['name']}.xlsx"}
+        )
 
+# ============ STATISTICS ENDPOINT ============
 
-app.include_router(api_router)
+@api_router.get("/statistics", response_model=Statistics)
+async def get_statistics(current_user: dict = Depends(get_current_user)):
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        # Get counts
+        total_projects = await conn.fetchval('SELECT COUNT(*) FROM projects')
+        total_test_cases = await conn.fetchval('SELECT COUNT(*) FROM test_cases')
+        draft_count = await conn.fetchval("SELECT COUNT(*) FROM test_cases WHERE status = 'draft'")
+        success_count = await conn.fetchval("SELECT COUNT(*) FROM test_cases WHERE status = 'success'")
+        fail_count = await conn.fetchval("SELECT COUNT(*) FROM test_cases WHERE status = 'fail'")
+        
+        return Statistics(
+            total_projects=total_projects or 0,
+            total_test_cases=total_test_cases or 0,
+            draft_count=draft_count or 0,
+            success_count=success_count or 0,
+            fail_count=fail_count or 0
+        )
+
+# ============ CORS & APP SETUP ============
 
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+app.include_router(api_router)
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+@app.get("/")
+async def root():
+    return {"message": "QA Dashboard API with PostgreSQL - Running"}
+
+@app.get("/health")
+async def health_check():
+    try:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            await conn.fetchval('SELECT 1')
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}

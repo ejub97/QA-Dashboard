@@ -389,7 +389,6 @@ async def create_project(
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         project_id = str(uuid.uuid4())
-        now = CURRENT_TIMESTAMP
         
         await conn.execute(
             '''INSERT INTO projects (id, name, description, created_by, tabs)

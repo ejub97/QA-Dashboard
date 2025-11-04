@@ -41,9 +41,9 @@ async def init_database():
                 email VARCHAR(255) UNIQUE NOT NULL,
                 hashed_password VARCHAR(255) NOT NULL,
                 role VARCHAR(50) DEFAULT 'editor',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                 reset_token VARCHAR(255),
-                reset_token_expires TIMESTAMP
+                reset_token_expires TIMESTAMPTZ
             )
         ''')
         

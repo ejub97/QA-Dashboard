@@ -220,8 +220,13 @@ async def register(user_data: UserCreate):
 
 @api_router.post("/auth/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
+    import asyncpg
+    import os
+    DATABASE_URL = os.environ.get('DATABASE_URL')
+    
+    # Use direct connection to avoid cached statement issues
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
         user_data = await conn.fetchrow(
             'SELECT * FROM users WHERE username = $1',
             form_data.username

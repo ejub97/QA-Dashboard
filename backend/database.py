@@ -18,7 +18,16 @@ async def get_db_pool():
     """Get or create database connection pool"""
     global pool
     if pool is None:
-        pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
+        pool = await asyncpg.create_pool(
+            DATABASE_URL, 
+            min_size=2, 
+            max_size=10,
+            command_timeout=60,
+            server_settings={
+                'application_name': 'qa_dashboard',
+                'jit': 'off'
+            }
+        )
     return pool
 
 async def close_db_pool():

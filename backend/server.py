@@ -294,6 +294,72 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         is_active=current_user["is_active"]
     )
 
+@api_router.post("/auth/forgot-password")
+async def forgot_password(request: ForgotPasswordRequest):
+    """Request password reset email"""
+    user = await db.users.find_one({"email": request.email}, {"_id": 0})
+    
+    # Always return success to prevent email enumeration
+    if not user:
+        return {"message": "If an account with that email exists, a password reset link has been sent."}
+    
+    # Generate reset token
+    reset_token = generate_reset_token()
+    token_expiry = get_token_expiry()
+    
+    # Store reset token in database
+    await db.users.update_one(
+        {"email": request.email},
+        {
+            "$set": {
+                "reset_token": reset_token,
+                "reset_token_expiry": token_expiry.isoformat()
+            }
+        }
+    )
+    
+    # Send email
+    await send_password_reset_email(request.email, reset_token, user["username"])
+    
+    return {"message": "If an account with that email exists, a password reset link has been sent."}
+
+@api_router.post("/auth/reset-password")
+async def reset_password(request: ResetPasswordRequest):
+    """Reset password using token"""
+    # Find user with valid token
+    user = await db.users.find_one({
+        "reset_token": request.token
+    }, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    
+    # Check if token is expired
+    token_expiry = datetime.fromisoformat(user["reset_token_expiry"])
+    if datetime.now(timezone.utc) > token_expiry:
+        raise HTTPException(status_code=400, detail="Reset token has expired")
+    
+    # Validate new password
+    if len(request.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    
+    # Update password and clear reset token
+    hashed_password = get_password_hash(request.new_password)
+    await db.users.update_one(
+        {"id": user["id"]},
+        {
+            "$set": {
+                "hashed_password": hashed_password
+            },
+            "$unset": {
+                "reset_token": "",
+                "reset_token_expiry": ""
+            }
+        }
+    )
+    
+    return {"message": "Password has been reset successfully. You can now login with your new password."}
+
 
 # ============ PROJECT ROUTES ============
 

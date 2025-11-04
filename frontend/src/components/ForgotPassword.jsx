@@ -22,9 +22,9 @@ const ForgotPassword = () => {
     try {
       await axios.post(`${API}/auth/forgot-password`, { email });
       setEmailSent(true);
-      toast.success('Password reset instructions sent to your email!');
+      // 'Password reset instructions sent to your email!');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to send reset email');
+      // error.response?.data?.detail || 'Failed to send reset email');
     } finally {
       setLoading(false);
     }

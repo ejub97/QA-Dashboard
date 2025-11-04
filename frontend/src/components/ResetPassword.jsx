@@ -20,7 +20,7 @@ const ResetPassword = () => {
 
   useEffect(() => {
     if (!token) {
-      toast.error('Invalid reset link');
+      // 'Invalid reset link');
       navigate('/login');
     }
   }, [token, navigate]);
@@ -29,12 +29,12 @@ const ResetPassword = () => {
     e.preventDefault();
 
     if (newPassword !== confirmPassword) {
-      toast.error('Passwords do not match');
+      // 'Passwords do not match');
       return;
     }
 
     if (newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+      // 'Password must be at least 6 characters');
       return;
     }
 
@@ -46,12 +46,12 @@ const ResetPassword = () => {
         new_password: newPassword
       });
       setResetSuccess(true);
-      toast.success('Password reset successful!');
+      // 'Password reset successful!');
       setTimeout(() => {
         navigate('/login');
       }, 3000);
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to reset password');
+      // error.response?.data?.detail || 'Failed to reset password');
     } finally {
       setLoading(false);
     }

@@ -20,10 +20,10 @@ const Login = () => {
 
     try {
       await login(username, password);
-      toast.success('Login successful!');
+      // 'Login successful!');
       navigate('/');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Login failed');
+      // error.response?.data?.detail || 'Login failed');
     } finally {
       setLoading(false);
     }

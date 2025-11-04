@@ -27,12 +27,12 @@ const Register = () => {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
+      // 'Passwords do not match');
       return;
     }
 
     if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+      // 'Password must be at least 6 characters');
       return;
     }
 
@@ -40,10 +40,10 @@ const Register = () => {
 
     try {
       await register(formData.username, formData.email, formData.password, formData.fullName);
-      toast.success('Registration successful!');
+      // 'Registration successful!');
       navigate('/');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Registration failed');
+      // error.response?.data?.detail || 'Registration failed');
     } finally {
       setLoading(false);
     }

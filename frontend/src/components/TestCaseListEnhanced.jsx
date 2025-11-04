@@ -100,7 +100,7 @@ const TestCaseList = ({ project, userRole }) => {
       const response = await axios.get(`${API}/test-cases`, { params });
       setTestCases(response.data);
     } catch (error) {
-      toast.error('Failed to load test cases');
+      // 'Failed to load test cases');
       console.error(error);
     } finally {
       setLoading(false);
@@ -115,9 +115,9 @@ const TestCaseList = ({ project, userRole }) => {
       await loadTabs();
       setActiveTab(data.tab);
       setRefreshKey(prev => prev + 1);
-      toast.success('Test case created successfully!');
+      // 'Test case created successfully!');
     } catch (error) {
-      toast.error('Failed to create test case');
+      // 'Failed to create test case');
       console.error(error);
     }
   };
@@ -130,9 +130,9 @@ const TestCaseList = ({ project, userRole }) => {
       setShowForm(false);
       await loadTabs();
       setRefreshKey(prev => prev + 1);
-      toast.success('Test case updated successfully!');
+      // 'Test case updated successfully!');
     } catch (error) {
-      toast.error('Failed to update test case');
+      // 'Failed to update test case');
       console.error(error);
     }
   };
@@ -142,9 +142,9 @@ const TestCaseList = ({ project, userRole }) => {
       const response = await axios.patch(`${API}/test-cases/${testCaseId}/status`, { status: newStatus });
       setTestCases(testCases.map((tc) => (tc.id === testCaseId ? response.data : tc)));
       setRefreshKey(prev => prev + 1);
-      toast.success('Status updated successfully!');
+      // 'Status updated successfully!');
     } catch (error) {
-      toast.error('Failed to update status');
+      // 'Failed to update status');
       console.error(error);
     }
   };
@@ -159,9 +159,9 @@ const TestCaseList = ({ project, userRole }) => {
       setSelectedCases([]);
       setShowBulkActions(false);
       setRefreshKey(prev => prev + 1);
-      toast.success(`Updated ${selectedCases.length} test cases`);
+      // `Updated ${selectedCases.length} test cases`);
     } catch (error) {
-      toast.error('Failed to update test cases');
+      // 'Failed to update test cases');
       console.error(error);
     }
   };
@@ -173,9 +173,9 @@ const TestCaseList = ({ project, userRole }) => {
       setSelectedCases([]);
       setShowBulkActions(false);
       await loadTabs();
-      toast.success(`Deleted ${selectedCases.length} test cases`);
+      // `Deleted ${selectedCases.length} test cases`);
     } catch (error) {
-      toast.error('Failed to delete test cases');
+      // 'Failed to delete test cases');
       console.error(error);
     }
   };
@@ -184,9 +184,9 @@ const TestCaseList = ({ project, userRole }) => {
     try {
       const response = await axios.post(`${API}/test-cases/${testCaseId}/duplicate`);
       setTestCases([...testCases, response.data]);
-      toast.success('Test case duplicated successfully!');
+      // 'Test case duplicated successfully!');
     } catch (error) {
-      toast.error('Failed to duplicate test case');
+      // 'Failed to duplicate test case');
       console.error(error);
     }
   };
@@ -197,9 +197,9 @@ const TestCaseList = ({ project, userRole }) => {
       setTestCases(testCases.filter((tc) => tc.id !== deleteTestCase.id));
       setDeleteTestCase(null);
       await loadTabs();
-      toast.success('Test case deleted successfully!');
+      // 'Test case deleted successfully!');
     } catch (error) {
-      toast.error('Failed to delete test case');
+      // 'Failed to delete test case');
       console.error(error);
     }
   };
@@ -222,9 +222,9 @@ const TestCaseList = ({ project, userRole }) => {
       setActiveTab(newTabName);
       setEditingTab(null);
       setNewTabName('');
-      toast.success('Tab renamed successfully!');
+      // 'Tab renamed successfully!');
     } catch (error) {
-      toast.error('Failed to rename tab');
+      // 'Failed to rename tab');
       console.error(error);
     }
   };
@@ -240,16 +240,16 @@ const TestCaseList = ({ project, userRole }) => {
       await loadTestCases();
       await loadTabs();
       setDeleteTab(null);
-      toast.success('Tab and all test cases deleted successfully!');
+      // 'Tab and all test cases deleted successfully!');
     } catch (error) {
-      toast.error('Failed to delete tab');
+      // 'Failed to delete tab');
       console.error(error);
     }
   };
 
   const handleImport = async () => {
     if (!importFile) {
-      toast.error('Please select a file');
+      // 'Please select a file');
       return;
     }
 
@@ -260,13 +260,13 @@ const TestCaseList = ({ project, userRole }) => {
       const response = await axios.post(`${API}/test-cases/import/${project.id}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      toast.success(`Imported ${response.data.imported_count} test cases`);
+      // `Imported ${response.data.imported_count} test cases`);
       await loadTestCases();
       await loadTabs();
       setShowImport(false);
       setImportFile(null);
     } catch (error) {
-      toast.error('Failed to import test cases');
+      // 'Failed to import test cases');
       console.error(error);
     }
   };
@@ -282,9 +282,9 @@ const TestCaseList = ({ project, userRole }) => {
       });
       await loadTestCases();
       setCommentText('');
-      toast.success('Comment added!');
+      // 'Comment added!');
     } catch (error) {
-      toast.error('Failed to add comment');
+      // 'Failed to add comment');
       console.error(error);
     }
   };
@@ -302,9 +302,9 @@ const TestCaseList = ({ project, userRole }) => {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      toast.success(`Exported as ${format.toUpperCase()} successfully!`);
+      // `Exported as ${format.toUpperCase()} successfully!`);
     } catch (error) {
-      toast.error(`Failed to export as ${format.toUpperCase()}`);
+      // `Failed to export as ${format.toUpperCase()}`);
       console.error(error);
     }
   };

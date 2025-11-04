@@ -30,7 +30,7 @@ const TeamManagement = ({ project, isOwner, canManageTeam, onUpdate }) => {
 
   const handleAddMember = async () => {
     if (!username.trim()) {
-      toast.error('Please enter a username');
+      // 'Please enter a username');
       return;
     }
 
@@ -40,13 +40,13 @@ const TeamManagement = ({ project, isOwner, canManageTeam, onUpdate }) => {
         username,
         role
       });
-      toast.success(`Added ${username} as ${role}`);
+      // `Added ${username} as ${role}`);
       setUsername('');
       setRole('viewer');
       setShowAddMember(false);
       if (onUpdate) onUpdate();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to add member');
+      // error.response?.data?.detail || 'Failed to add member');
     } finally {
       setLoading(false);
     }
@@ -55,11 +55,11 @@ const TeamManagement = ({ project, isOwner, canManageTeam, onUpdate }) => {
   const handleRemoveMember = async () => {
     try {
       await axios.delete(`${API}/projects/${project.id}/members/${removeMember.user_id}`);
-      toast.success(`Removed ${removeMember.username}`);
+      // `Removed ${removeMember.username}`);
       setRemoveMember(null);
       if (onUpdate) onUpdate();
     } catch (error) {
-      toast.error('Failed to remove member');
+      // 'Failed to remove member');
     }
   };
 
@@ -68,10 +68,10 @@ const TeamManagement = ({ project, isOwner, canManageTeam, onUpdate }) => {
       await axios.put(`${API}/projects/${project.id}/members/${userId}/role`, null, {
         params: { role: newRole }
       });
-      toast.success('Role updated successfully');
+      // 'Role updated successfully');
       if (onUpdate) onUpdate();
     } catch (error) {
-      toast.error('Failed to update role');
+      // 'Failed to update role');
     }
   };
 

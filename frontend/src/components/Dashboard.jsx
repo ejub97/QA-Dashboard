@@ -47,12 +47,8 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    if (inviteCode) {
-      loadProjectByInvite(inviteCode);
-    } else {
-      loadProjects();
-    }
-  }, [inviteCode]);
+    loadProjects();
+  }, [projectRefreshKey]);
 
   const loadProjects = async () => {
     try {

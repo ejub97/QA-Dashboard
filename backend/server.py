@@ -34,7 +34,18 @@ load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+# Configure SSL/TLS for cloud database connections
+if "mongodb+srv" in mongo_url:
+    import ssl
+    client = AsyncIOMotorClient(
+        mongo_url,
+        tls=True,
+        tlsAllowInvalidCertificates=True,  # For Emergent environment
+        serverSelectionTimeoutMS=10000,
+        connectTimeoutMS=10000
+    )
+else:
+    client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 app = FastAPI()

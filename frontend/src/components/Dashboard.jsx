@@ -142,7 +142,11 @@ const Dashboard = () => {
               </h1>
               <p className="text-gray-600">Manage your test cases efficiently</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              <div className="text-right mr-3">
+                <p className="text-sm font-medium text-gray-900">{user?.full_name}</p>
+                <p className="text-xs text-gray-500">@{user?.username}</p>
+              </div>
               <Button
                 variant="outline"
                 size="icon"
@@ -151,6 +155,15 @@ const Dashboard = () => {
                 className="btn-secondary"
               >
                 {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleLogout}
+                data-testid="logout-btn"
+                className="btn-secondary"
+              >
+                <LogOut size={16} className="mr-2" />
+                Logout
               </Button>
               <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
                 <DialogTrigger asChild>

@@ -1,6 +1,7 @@
 import requests
 import sys
 import json
+import re
 from datetime import datetime
 
 class QADashboardAPITester:
@@ -12,6 +13,11 @@ class QADashboardAPITester:
         self.project_id = None
         self.test_case_id = None
         self.invite_code = None
+        self.access_token = None
+        self.test_user_email = "testuser@example.com"
+        self.test_user_password = "TestPass123"
+        self.test_username = "testuser"
+        self.reset_token = None
 
     def run_test(self, name, method, endpoint, expected_status, data=None, params=None):
         """Run a single API test"""

@@ -58,6 +58,7 @@ class QADashboardPostgreSQLTester:
                 except:
                     return True, {}
             else:
+                self.failed_tests.append(f"{name}: Expected {expected_status}, got {response.status_code}")
                 print(f"❌ Failed - Expected {expected_status}, got {response.status_code}")
                 try:
                     error_data = response.json()
@@ -67,6 +68,7 @@ class QADashboardPostgreSQLTester:
                 return False, {}
 
         except Exception as e:
+            self.failed_tests.append(f"{name}: Exception - {str(e)}")
             print(f"❌ Failed - Error: {str(e)}")
             return False, {}
 

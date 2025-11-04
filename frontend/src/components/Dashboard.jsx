@@ -65,22 +65,6 @@ const Dashboard = () => {
     }
   };
 
-  const loadProjectByInvite = async (code) => {
-    try {
-      const response = await axios.get(`${API}/projects/invite/${code}`);
-      setSelectedProject(response.data);
-      setProjects([response.data]);
-      navigate('/', { replace: true });
-      toast.success('Project loaded successfully!');
-    } catch (error) {
-      toast.error('Invalid invite code');
-      console.error(error);
-      navigate('/');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const createProject = async (e) => {
     e.preventDefault();
     if (!projectForm.name.trim()) {
@@ -101,12 +85,6 @@ const Dashboard = () => {
     }
   };
 
-  const copyInviteLink = (project) => {
-    const inviteLink = `${window.location.origin}/invite/${project.invite_code}`;
-    navigator.clipboard.writeText(inviteLink);
-    toast.success('Invite link copied to clipboard!');
-  };
-
   const deleteProject = async (project) => {
     try {
       await axios.delete(`${API}/projects/${project.id}`);
@@ -120,9 +98,27 @@ const Dashboard = () => {
       
       toast.success('Project deleted successfully!');
     } catch (error) {
-      toast.error('Failed to delete project');
+      toast.error(error.response?.data?.detail || 'Failed to delete project');
       console.error(error);
     }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+    toast.success('Logged out successfully');
+  };
+
+  const getProjectRole = (project) => {
+    if (!user) return null;
+    if (project.owner_id === user.id) return 'owner';
+    const member = project.members?.find(m => m.user_id === user.id);
+    return member?.role || null;
+  };
+
+  const canManageTeam = (project) => {
+    const role = getProjectRole(project);
+    return role === 'owner' || role === 'admin';
   };
 
   if (loading) {

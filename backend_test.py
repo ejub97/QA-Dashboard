@@ -596,33 +596,86 @@ class QADashboardPostgreSQLTester:
             self.tests_run += 1
             return False
 
-    def test_export_docx(self):
-        """Test DOCX export"""
+    def test_export_word(self):
+        """Test Word export from PostgreSQL"""
         if not self.project_id:
             print("❌ Skipping - No project ID available")
             return False
         
-        url = f"{self.api_url}/test-cases/export/docx/{self.project_id}"
-        print(f"\n🔍 Testing Export DOCX...")
+        url = f"{self.api_url}/export/word/{self.project_id}"
+        print(f"\n🔍 Testing Export Word (PostgreSQL)...")
         print(f"   URL: {url}")
         
         try:
-            response = requests.get(url)
+            headers = {'Authorization': f'Bearer {self.access_token}'} if self.access_token else {}
+            response = requests.get(url, headers=headers)
             success = response.status_code == 200 and 'officedocument' in response.headers.get('content-type', '')
             self.tests_run += 1
             
             if success:
                 self.tests_passed += 1
                 print(f"✅ Passed - Status: {response.status_code}")
-                print(f"   Content-Type: {response.headers.get('content-type')}")
+                print(f"   ✅ Content-Type: {response.headers.get('content-type')}")
+                print(f"   ✅ File size: {len(response.content)} bytes")
                 return True
             else:
+                self.failed_tests.append(f"Word Export: Expected 200, got {response.status_code}")
                 print(f"❌ Failed - Status: {response.status_code}")
                 return False
         except Exception as e:
+            self.failed_tests.append(f"Word Export: Exception - {str(e)}")
             print(f"❌ Failed - Error: {str(e)}")
             self.tests_run += 1
             return False
+
+    def test_export_excel(self):
+        """Test Excel export from PostgreSQL"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        url = f"{self.api_url}/export/excel/{self.project_id}"
+        print(f"\n🔍 Testing Export Excel (PostgreSQL)...")
+        print(f"   URL: {url}")
+        
+        try:
+            headers = {'Authorization': f'Bearer {self.access_token}'} if self.access_token else {}
+            response = requests.get(url, headers=headers)
+            success = response.status_code == 200 and 'spreadsheet' in response.headers.get('content-type', '')
+            self.tests_run += 1
+            
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                print(f"   ✅ Content-Type: {response.headers.get('content-type')}")
+                print(f"   ✅ File size: {len(response.content)} bytes")
+                return True
+            else:
+                self.failed_tests.append(f"Excel Export: Expected 200, got {response.status_code}")
+                print(f"❌ Failed - Status: {response.status_code}")
+                return False
+        except Exception as e:
+            self.failed_tests.append(f"Excel Export: Exception - {str(e)}")
+            print(f"❌ Failed - Error: {str(e)}")
+            self.tests_run += 1
+            return False
+
+    def test_statistics(self):
+        """Test statistics from PostgreSQL"""
+        success, response = self.run_test(
+            "Get Statistics (PostgreSQL)",
+            "GET",
+            "statistics",
+            200
+        )
+        if success:
+            print(f"   ✅ Total projects: {response.get('total_projects', 0)}")
+            print(f"   ✅ Total test cases: {response.get('total_test_cases', 0)}")
+            print(f"   ✅ Draft count: {response.get('draft_count', 0)}")
+            print(f"   ✅ Success count: {response.get('success_count', 0)}")
+            print(f"   ✅ Fail count: {response.get('fail_count', 0)}")
+            return True
+        return False
 
     def test_delete_test_case(self):
         """Test deleting test case"""

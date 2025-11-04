@@ -234,6 +234,7 @@ const Dashboard = () => {
               selectedProject={selectedProject}
               onSelectProject={setSelectedProject}
               onDeleteProject={deleteProject}
+              onRenameProject={renameProject}
               user={user}
             />
           </div>

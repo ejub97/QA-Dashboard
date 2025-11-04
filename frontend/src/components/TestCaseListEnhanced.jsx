@@ -385,16 +385,18 @@ const TestCaseList = ({ project, userRole }) => {
             <p className="text-sm text-gray-600 mt-1">{testCases.length} test case(s)</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => setShowImport(true)}
-              variant="outline"
-              size="sm"
-              className="btn-secondary"
-              data-testid="import-btn"
-            >
-              <Upload size={16} className="mr-2" />
-              Import
-            </Button>
+            {canEdit && (
+              <Button
+                onClick={() => setShowImport(true)}
+                variant="outline"
+                size="sm"
+                className="btn-secondary"
+                data-testid="import-btn"
+              >
+                <Upload size={16} className="mr-2" />
+                Import
+              </Button>
+            )}
             <Button
               onClick={() => handleExport('docx')}
               variant="outline"
@@ -415,18 +417,20 @@ const TestCaseList = ({ project, userRole }) => {
               <FileSpreadsheet size={16} className="mr-2" />
               Export Excel
             </Button>
-            <Button
-              onClick={() => {
-                setEditingTestCase(null);
-                setShowForm(true);
-              }}
-              className="btn-dark"
-              size="sm"
-              data-testid="add-testcase-btn"
-            >
-              <Plus size={16} className="mr-2" />
-              Add Test Case
-            </Button>
+            {canEdit && (
+              <Button
+                onClick={() => {
+                  setEditingTestCase(null);
+                  setShowForm(true);
+                }}
+                className="btn-dark"
+                size="sm"
+                data-testid="add-testcase-btn"
+              >
+                <Plus size={16} className="mr-2" />
+                Add Test Case
+              </Button>
+            )}
           </div>
         </div>
 

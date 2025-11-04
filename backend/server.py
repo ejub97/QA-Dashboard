@@ -392,10 +392,10 @@ async def create_project(
         now = datetime.now(timezone.utc)
         
         await conn.execute(
-            '''INSERT INTO projects (id, name, description, created_by, created_at, updated_at, tabs)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)''',
+            '''INSERT INTO projects (id, name, description, created_by, tabs)
+               VALUES ($1, $2, $3, $4, $5)''',
             project_id, project_data.name, project_data.description or "",
-            current_user['id'], now, now, json.dumps(["General"])
+            current_user['id'], json.dumps(["General"])
         )
         
         return Project(

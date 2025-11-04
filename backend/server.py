@@ -429,6 +429,30 @@ async def delete_project(project_id: str, current_user: dict = Depends(get_curre
     
     return {"message": "Project deleted successfully"}
 
+
+@api_router.put("/projects/{project_id}")
+async def rename_project(
+    project_id: str,
+    name: str,
+    description: str = "",
+    current_user: dict = Depends(get_current_user)
+):
+    project = await db.projects.find_one({"id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Only owner can rename
+    if project["owner_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Only project owner can rename the project")
+    
+    await db.projects.update_one(
+        {"id": project_id},
+        {"$set": {"name": name, "description": description}}
+    )
+    
+    return {"message": "Project updated successfully"}
+
+
 @api_router.post("/projects/{project_id}/members")
 async def add_project_member(
     project_id: str,

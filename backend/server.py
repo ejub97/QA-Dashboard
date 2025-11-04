@@ -23,6 +23,11 @@ from auth import (
     decode_token,
     oauth2_scheme
 )
+from email_service import (
+    generate_reset_token,
+    get_token_expiry,
+    send_password_reset_email
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')

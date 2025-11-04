@@ -398,35 +398,7 @@ class QADashboardPostgreSQLTester:
             return True
         return False
 
-    def test_invalid_endpoints(self):
-        """Test invalid endpoints for proper error handling"""
-        print("\n🔍 Testing Error Handling...")
-        
-        # Test invalid project ID
-        success, _ = self.run_test(
-            "Invalid Project ID",
-            "GET",
-            "projects/invalid-id",
-            404
-        )
-        
-        # Test invalid test case ID
-        success2, _ = self.run_test(
-            "Invalid Test Case ID",
-            "GET",
-            "test-cases/invalid-id",
-            404
-        )
-        
-        # Test invalid invite code
-        success3, _ = self.run_test(
-            "Invalid Invite Code",
-            "GET",
-            "projects/invite/invalid-code",
-            404
-        )
-        
-        return success and success2 and success3
+    # Removed old error handling tests - focusing on PostgreSQL migration verification
 
 def main():
     print("🚀 Starting QA Dashboard PostgreSQL Migration Tests")

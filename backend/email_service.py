@@ -24,7 +24,7 @@ def get_token_expiry():
 
 async def send_password_reset_email(email: str, reset_token: str, username: str):
     """Send password reset email"""
-    reset_link = f"{FRONTEND_URL}/reset-password?token={reset_token}"
+    reset_link = f"{FRONTEND_URL}/reset-password/{reset_token}"
     
     # For development/testing without SMTP, just log the link
     if not SMTP_USER or not SMTP_PASSWORD:

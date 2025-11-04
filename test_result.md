@@ -153,39 +153,48 @@ backend:
 frontend:
   - task: "Forgot Password UI"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/frontend/src/components/ForgotPassword.jsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: "NA"
           agent: "main"
           comment: "Forgot password form implemented with email input. Integrated with /api/auth/forgot-password endpoint. Shows success toast when email is sent."
+        - working: true
+          agent: "testing"
+          comment: "✅ PASSED: Forgot password UI working correctly. Form displays properly, email validation working (HTML5 validation for empty and invalid format), API integration successful (200 status), success message 'Check Your Email' displays correctly with proper instructions, resend and back to login buttons present. Responsive design tested on mobile and tablet. Complete forgot password flow functional."
 
   - task: "Reset Password UI"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/frontend/src/components/ResetPassword.jsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: "NA"
           agent: "main"
           comment: "Reset password form implemented. Extracts token from URL parameter. Allows user to enter new password and confirm password with validation."
+        - working: true
+          agent: "testing"
+          comment: "✅ PASSED: Reset password UI working correctly after fixing routing issue. CRITICAL FIX APPLIED: Changed route from /reset-password to /reset-password/:token and updated component to use useParams instead of useSearchParams to match backend email link format. Form validation working (password mismatch, weak password), API integration successful, proper error handling for invalid tokens (400 status). Success state displays correctly with redirect to login."
 
   - task: "Login Page - Forgot Password Link"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/frontend/src/components/Login.jsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: "NA"
           agent: "main"
           comment: "Added 'Forgot Password?' link to login page that navigates to /forgot-password route."
+        - working: true
+          agent: "testing"
+          comment: "✅ PASSED: Forgot password link on login page working correctly. Link properly navigates to /forgot-password route, positioned correctly below password field, styled consistently with application theme."
 
 metadata:
   created_by: "main_agent"

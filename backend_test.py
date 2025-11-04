@@ -678,18 +678,21 @@ class QADashboardPostgreSQLTester:
         return False
 
     def test_delete_test_case(self):
-        """Test deleting test case"""
+        """Test deleting test case from PostgreSQL"""
         if not self.test_case_id:
             print("❌ Skipping - No test case ID available")
             return False
         
         success, response = self.run_test(
-            "Delete Test Case",
+            "Delete Test Case (PostgreSQL)",
             "DELETE",
-            f"test-cases/{self.test_case_id}",
+            f"testcases/{self.test_case_id}",
             200
         )
-        return success
+        if success:
+            print(f"   ✅ Test case deleted from PostgreSQL")
+            return True
+        return False
 
     def test_invalid_endpoints(self):
         """Test invalid endpoints for proper error handling"""

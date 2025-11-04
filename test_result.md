@@ -318,13 +318,16 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "1.0"
-  test_sequence: 3
+  version: "2.0"
+  test_sequence: 4
   run_ui: true
+  migration_status: "postgresql_complete"
 
 test_plan:
-  current_focus: []
-  stuck_tasks: []
+  current_focus: 
+    - "User Authentication - Login"
+  stuck_tasks: 
+    - "User Authentication - Login"
   test_all: false
   test_priority: "high_first"
 

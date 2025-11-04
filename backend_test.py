@@ -298,33 +298,7 @@ class QADashboardPostgreSQLTester:
             return True
         return False
 
-    def test_export_csv(self):
-        """Test CSV export"""
-        if not self.project_id:
-            print("❌ Skipping - No project ID available")
-            return False
-        
-        url = f"{self.api_url}/test-cases/export/csv/{self.project_id}"
-        print(f"\n🔍 Testing Export CSV...")
-        print(f"   URL: {url}")
-        
-        try:
-            response = requests.get(url)
-            success = response.status_code == 200 and 'text/csv' in response.headers.get('content-type', '')
-            self.tests_run += 1
-            
-            if success:
-                self.tests_passed += 1
-                print(f"✅ Passed - Status: {response.status_code}")
-                print(f"   Content-Type: {response.headers.get('content-type')}")
-                return True
-            else:
-                print(f"❌ Failed - Status: {response.status_code}")
-                return False
-        except Exception as e:
-            print(f"❌ Failed - Error: {str(e)}")
-            self.tests_run += 1
-            return False
+    # Removed old CSV export test - using Word/Excel exports for PostgreSQL
 
     def test_export_word(self):
         """Test Word export from PostgreSQL"""

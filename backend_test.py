@@ -452,30 +452,34 @@ class QADashboardPostgreSQLTester:
         return success and response.get('invite_code') == self.invite_code
 
     def test_create_test_case(self):
-        """Test test case creation"""
+        """Test test case creation in PostgreSQL"""
         if not self.project_id:
             print("❌ Skipping - No project ID available")
             return False
         
         test_case_data = {
             "project_id": self.project_id,
-            "title": "Sample Test Case",
-            "description": "This is a test case for API testing",
+            "tab_section": "General",
+            "title": "PostgreSQL Migration Test Case",
+            "description": "Testing test case creation after PostgreSQL migration",
             "priority": "high",
             "type": "functional",
-            "steps": "1. Open application\n2. Click login button\n3. Enter credentials",
-            "expected_result": "User should be logged in successfully",
+            "steps": "1. Create test case in PostgreSQL\n2. Verify data persistence\n3. Check UUID generation",
+            "expected_result": "Test case should be created and stored in PostgreSQL with UUID",
             "actual_result": ""
         }
         success, response = self.run_test(
-            "Create Test Case",
+            "Create Test Case (PostgreSQL)",
             "POST",
-            "test-cases",
+            "testcases",
             200,
             data=test_case_data
         )
         if success and 'id' in response:
             self.test_case_id = response['id']
+            print(f"   ✅ Test case created with ID: {self.test_case_id}")
+            print(f"   ✅ Status: {response.get('status', 'N/A')}")
+            print(f"   ✅ Tab section: {response.get('tab_section', 'N/A')}")
             return True
         return False
 

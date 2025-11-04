@@ -46,7 +46,7 @@ class User(BaseModel):
     email: EmailStr
     hashed_password: str
     role: str = "editor"  # editor or viewer
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: CURRENT_TIMESTAMP)
     reset_token: Optional[str] = None
     reset_token_expires: Optional[datetime] = None
 
@@ -73,8 +73,8 @@ class Project(BaseModel):
     name: str
     description: Optional[str] = ""
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: CURRENT_TIMESTAMP)
+    updated_at: datetime = Field(default_factory=lambda: CURRENT_TIMESTAMP)
     tabs: List[str] = ["General"]
 
 class ProjectCreate(BaseModel):
@@ -96,8 +96,8 @@ class TestCase(BaseModel):
     actual_result: Optional[str] = ""
     status: str = "draft"
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: CURRENT_TIMESTAMP)
+    updated_at: datetime = Field(default_factory=lambda: CURRENT_TIMESTAMP)
 
 class TestCaseCreate(BaseModel):
     project_id: str
@@ -294,7 +294,7 @@ async def reset_password(request: ResetPasswordRequest):
             raise HTTPException(status_code=400, detail="Invalid or expired reset token")
         
         # Check if token is expired
-        if user['reset_token_expires'] < datetime.now(timezone.utc):
+        if user['reset_token_expires'] < CURRENT_TIMESTAMP:
             raise HTTPException(status_code=400, detail="Reset token has expired")
         
         # Update password and clear reset token
@@ -389,7 +389,7 @@ async def create_project(
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         project_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc)
+        now = CURRENT_TIMESTAMP
         
         await conn.execute(
             '''INSERT INTO projects (id, name, description, created_by, tabs)
@@ -447,7 +447,7 @@ async def add_tab_to_project(
         
         await conn.execute(
             'UPDATE projects SET tabs = $1, updated_at = $2 WHERE id = $3',
-            json.dumps(tabs), datetime.now(timezone.utc), project_id
+            json.dumps(tabs), CURRENT_TIMESTAMP, project_id
         )
         
         return {"message": "Tab added successfully", "tabs": tabs}
@@ -479,7 +479,7 @@ async def rename_tab(
         # Update project tabs
         await conn.execute(
             'UPDATE projects SET tabs = $1, updated_at = $2 WHERE id = $3',
-            json.dumps(tabs), datetime.now(timezone.utc), project_id
+            json.dumps(tabs), CURRENT_TIMESTAMP, project_id
         )
         
         # Update test cases with this tab
@@ -517,7 +517,7 @@ async def delete_tab(
         # Update project
         await conn.execute(
             'UPDATE projects SET tabs = $1, updated_at = $2 WHERE id = $3',
-            json.dumps(tabs), datetime.now(timezone.utc), project_id
+            json.dumps(tabs), CURRENT_TIMESTAMP, project_id
         )
         
         # Delete test cases in this tab
@@ -570,7 +570,7 @@ async def create_test_case(
     pool = await get_db_pool()
     async with pool.acquire() as conn:
         tc_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc)
+        now = CURRENT_TIMESTAMP
         
         await conn.execute(
             '''INSERT INTO test_cases (
@@ -633,7 +633,7 @@ async def update_test_case(
         
         if update_fields:
             update_fields.append(f"updated_at = ${param_count}")
-            values.append(datetime.now(timezone.utc))
+            values.append(CURRENT_TIMESTAMP)
             values.append(test_case_id)
             
             query = f"UPDATE test_cases SET {', '.join(update_fields)} WHERE id = ${param_count + 1}"

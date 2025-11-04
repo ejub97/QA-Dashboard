@@ -231,7 +231,15 @@ const Dashboard = () => {
           {/* Test Cases Main Area */}
           <div className="lg:col-span-3">
             {selectedProject ? (
-              <TestCaseList project={selectedProject} />
+              <>
+                <TeamManagement
+                  project={selectedProject}
+                  isOwner={selectedProject.owner_id === user?.id}
+                  canManageTeam={canManageTeam(selectedProject)}
+                  onUpdate={() => setProjectRefreshKey(prev => prev + 1)}
+                />
+                <TestCaseList project={selectedProject} userRole={getProjectRole(selectedProject)} />
+              </>
             ) : (
               <div className="glass-effect rounded-2xl p-12 text-center">
                 <FileText className="mx-auto mb-4 text-gray-400" size={64} />

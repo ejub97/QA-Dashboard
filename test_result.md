@@ -270,6 +270,21 @@ backend:
           agent: "testing"
           comment: "✅ PASSED: Email service working correctly. SendGrid configuration properly set with API key and sender email. In development mode, email details are logged to backend logs with proper reset link format. Reset token generation and expiry (1 hour) working correctly. Email template includes proper reset link with token as path parameter."
 
+  - task: "Project Rename Functionality"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added new endpoint PUT /api/projects/{project_id} for renaming projects. Modified frontend to show edit/delete buttons for project owners. Removed toast notifications, using console.log instead."
+        - working: true
+          agent: "testing"
+          comment: "✅ PASSED: Project rename functionality working perfectly. NEW FEATURE tested comprehensively: 1) PUT /api/projects/{project_id}?name=X&description=Y endpoint working correctly (200 status), 2) Project name and description updated successfully in database, 3) Permission system working - 403 Forbidden when trying to rename projects you don't own, 4) Project delete functionality still working correctly, 5) All existing endpoints (GET /api/projects, POST /api/test-cases, GET /api/test-cases) working without breaking changes, 6) User registration with full_name field working correctly. Complete test suite: 16/16 tests passed (100% success rate)."
+
 frontend:
   - task: "Forgot Password UI"
     implemented: true

@@ -8,7 +8,7 @@ import io
 import tempfile
 import os
 
-class QADashboardProjectRenameTester:
+class QADashboardImportTester:
     def __init__(self, base_url="https://testcenter.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"

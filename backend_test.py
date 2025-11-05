@@ -436,26 +436,40 @@ class QADashboardProjectRenameTester:
     # Removed old project test methods - using PostgreSQL-specific tests
 
     def test_create_test_case(self):
-        """Test test case creation in PostgreSQL"""
-        if not self.project_id:
-            print("❌ Skipping - No project ID available")
+        """Test test case creation (verify no breaking changes)"""
+        # Create a new project first since we deleted the previous one
+        project_data = {
+            "name": "Test Case Project",
+            "description": "For testing test case creation"
+        }
+        success, response = self.run_test(
+            "Create Project for Test Case",
+            "POST",
+            "projects",
+            200,
+            data=project_data
+        )
+        if success and 'id' in response:
+            self.project_id = response['id']
+            print(f"   ✅ New project created with ID: {self.project_id}")
+        else:
             return False
         
         test_case_data = {
             "project_id": self.project_id,
-            "tab_section": "General",
-            "title": "PostgreSQL Migration Test Case",
-            "description": "Testing test case creation after PostgreSQL migration",
+            "tab": "General",
+            "title": "Test Case Creation Test",
+            "description": "Testing test case creation after rename functionality",
             "priority": "high",
             "type": "functional",
-            "steps": "1. Create test case in PostgreSQL\n2. Verify data persistence\n3. Check UUID generation",
-            "expected_result": "Test case should be created and stored in PostgreSQL with UUID",
+            "steps": "1. Create test case\n2. Verify data persistence\n3. Check functionality",
+            "expected_result": "Test case should be created successfully",
             "actual_result": ""
         }
         success, response = self.run_test(
-            "Create Test Case (PostgreSQL)",
+            "Create Test Case (No Breaking Changes)",
             "POST",
-            "testcases",
+            "test-cases",
             200,
             data=test_case_data
         )
@@ -463,7 +477,7 @@ class QADashboardProjectRenameTester:
             self.test_case_id = response['id']
             print(f"   ✅ Test case created with ID: {self.test_case_id}")
             print(f"   ✅ Status: {response.get('status', 'N/A')}")
-            print(f"   ✅ Tab section: {response.get('tab_section', 'N/A')}")
+            print(f"   ✅ Tab: {response.get('tab', 'N/A')}")
             return True
         return False
 

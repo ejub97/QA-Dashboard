@@ -1,0 +1,19 @@
+Title,Description,Priority,Type,Steps,Expected Result,Actual Result,Tab
+User Login - Valid Credentials,Test that user can login with valid credentials,high,functional,"1. Navigate to login page
+2. Enter valid username
+3. Enter valid password
+4. Click Login button",User should be logged in and redirected to dashboard,,Authentication
+User Login - Invalid Password,Test login failure with invalid password,high,negative,"1. Navigate to login page
+2. Enter valid username  
+3. Enter invalid password
+4. Click Login button",Error message should be displayed and user remains on login page,,Authentication
+Homepage Load Test,Verify homepage loads correctly,medium,smoke,"1. Open browser
+2. Navigate to homepage URL
+3. Wait for page to load",Homepage should load within 3 seconds with all elements visible,,General
+Search Functionality,Test search bar returns correct results,medium,functional,"1. Navigate to search page
+2. Enter search query
+3. Click Search button",Relevant results should be displayed matching the search query,,Features
+Button Hover Effect,Verify button changes color on hover,low,ui/ux,"1. Navigate to any page with buttons
+2. Hover mouse over button",Button background color should change to indicate hover state,,UI Testing
+API Response Time,Test API responds within acceptable time,high,api,"1. Send GET request to /api/users endpoint
+2. Measure response time",API should respond within 200ms with status code 200,,Performance

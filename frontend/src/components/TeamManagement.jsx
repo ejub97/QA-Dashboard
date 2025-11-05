@@ -65,13 +65,14 @@ const TeamManagement = ({ project, isOwner, canManageTeam, onUpdate }) => {
 
   const handleChangeRole = async (userId, newRole) => {
     try {
-      await axios.put(`${API}/projects/${project.id}/members/${userId}/role`, null, {
-        params: { role: newRole }
+      await axios.put(`${API}/projects/${project.id}/members/${userId}/role`, {
+        role: newRole
       });
-      // 'Role updated successfully');
+      console.log('Role updated successfully');
       if (onUpdate) onUpdate();
     } catch (error) {
-      // 'Failed to update role');
+      console.error('Failed to update role', error);
+      alert('Failed to update role: ' + (error.response?.data?.detail || error.message));
     }
   };
 

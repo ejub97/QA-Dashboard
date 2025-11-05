@@ -249,7 +249,7 @@ const TestCaseList = ({ project, userRole }) => {
 
   const handleImport = async () => {
     if (!importFile) {
-      // 'Please select a file');
+      alert('Please select a file to import');
       return;
     }
 
@@ -260,14 +260,24 @@ const TestCaseList = ({ project, userRole }) => {
       const response = await axios.post(`${API}/test-cases/import/${project.id}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      // `Imported ${response.data.imported_count} test cases`);
+      
+      let message = `✅ Successfully imported ${response.data.imported_count} test case(s)`;
+      
+      if (response.data.errors && response.data.errors.length > 0) {
+        message += `\n\n⚠️ ${response.data.total_errors} row(s) had errors:\n`;
+        message += response.data.errors.join('\n');
+      }
+      
+      alert(message);
+      
       await loadTestCases();
       await loadTabs();
       setShowImport(false);
       setImportFile(null);
     } catch (error) {
-      // 'Failed to import test cases');
-      console.error(error);
+      console.error('Import failed:', error);
+      const errorDetail = error.response?.data?.detail || error.message;
+      alert(`Failed to import test cases:\n\n${errorDetail}`);
     }
   };
 

@@ -3,20 +3,27 @@ import sys
 import json
 import re
 from datetime import datetime
+import uuid
 
-class QADashboardPostgreSQLTester:
+class QADashboardProjectRenameTester:
     def __init__(self, base_url="https://testcenter.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.tests_run = 0
         self.tests_passed = 0
         self.project_id = None
+        self.other_project_id = None
         self.test_case_id = None
         self.access_token = None
-        self.test_user_email = "pgtest@example.com"
-        self.test_user_password = "TestPass123"
-        self.test_username = "pgtest"
-        self.reset_token = None
+        self.other_access_token = None
+        # Use unique identifiers for this test session
+        unique_id = str(uuid.uuid4())[:8]
+        self.test_user_email = f"renametest{unique_id}@example.com"
+        self.test_user_password = "RenameTest123"
+        self.test_username = f"renametest{unique_id}"
+        self.other_user_email = f"otheruser{unique_id}@example.com"
+        self.other_user_password = "OtherUser123"
+        self.other_username = f"otheruser{unique_id}"
         self.failed_tests = []
 
     def run_test(self, name, method, endpoint, expected_status, data=None, params=None, headers=None):

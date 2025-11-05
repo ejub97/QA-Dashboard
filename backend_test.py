@@ -103,26 +103,26 @@ class QADashboardImportTester:
             return True
         return False
 
-    def test_register_other_user(self):
-        """Test registering another user for permission testing"""
-        user_data = {
-            "username": self.other_username,
-            "email": self.other_user_email,
-            "password": self.other_user_password,
-            "full_name": "Other Test User"
-        }
-        success, response = self.run_test(
-            "Register Other User for Permission Test",
-            "POST",
-            "auth/register",
-            200,
-            data=user_data
-        )
-        if success and 'access_token' in response:
-            self.other_access_token = response['access_token']
-            print(f"   ✅ Other user registered with ID: {response.get('user', {}).get('id', 'N/A')}")
-            return True
-        return False
+    def create_csv_file(self, content, filename="test.csv"):
+        """Create a temporary CSV file with given content"""
+        temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False)
+        temp_file.write(content)
+        temp_file.close()
+        return temp_file.name
+
+    def create_txt_file(self, content, filename="test.txt"):
+        """Create a temporary TXT file for testing invalid format"""
+        temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+        temp_file.write(content)
+        temp_file.close()
+        return temp_file.name
+
+    def cleanup_file(self, filepath):
+        """Clean up temporary file"""
+        try:
+            os.unlink(filepath)
+        except:
+            pass
 
     def test_login_user(self):
         """Test user login with PostgreSQL"""

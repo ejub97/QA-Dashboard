@@ -1040,7 +1040,7 @@ Missing columns in your file: """ + ', '.join(missing_columns)
                 )
                 
                 # Convert to TestCase model
-                tc = TestCase(**tc_data.model_dump(), owner_id=current_user['id'])
+                tc = TestCase(**tc_data.model_dump(), created_by=current_user['username'])
                 
                 # Prepare document for MongoDB
                 doc = tc.model_dump()

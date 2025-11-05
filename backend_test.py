@@ -21,12 +21,9 @@ class QADashboardImportTester:
         self.other_access_token = None
         # Use unique identifiers for this test session
         unique_id = str(uuid.uuid4())[:8]
-        self.test_user_email = f"renametest{unique_id}@example.com"
-        self.test_user_password = "RenameTest123"
-        self.test_username = f"renametest{unique_id}"
-        self.other_user_email = f"otheruser{unique_id}@example.com"
-        self.other_user_password = "OtherUser123"
-        self.other_username = f"otheruser{unique_id}"
+        self.test_user_email = f"importtest{unique_id}@example.com"
+        self.test_user_password = "ImportTest123"
+        self.test_username = f"importtest{unique_id}"
         self.failed_tests = []
 
     def run_test(self, name, method, endpoint, expected_status, data=None, params=None, headers=None):

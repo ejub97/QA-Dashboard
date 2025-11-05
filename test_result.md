@@ -285,6 +285,21 @@ backend:
           agent: "testing"
           comment: "✅ PASSED: Project rename functionality working perfectly. NEW FEATURE tested comprehensively: 1) PUT /api/projects/{project_id}?name=X&description=Y endpoint working correctly (200 status), 2) Project name and description updated successfully in database, 3) Permission system working - 403 Forbidden when trying to rename projects you don't own, 4) Project delete functionality still working correctly, 5) All existing endpoints (GET /api/projects, POST /api/test-cases, GET /api/test-cases) working without breaking changes, 6) User registration with full_name field working correctly. Complete test suite: 16/16 tests passed (100% success rate)."
 
+  - task: "Import Test Cases Functionality"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Added new endpoint POST /api/test-cases/import/{project_id} for importing test cases from CSV/Excel files with comprehensive validation. Includes file format validation, required columns validation, data validation (priority, type values), empty file handling, and detailed error reporting."
+        - working: true
+          agent: "testing"
+          comment: "✅ PASSED: Import test cases functionality working perfectly. NEW FEATURE tested comprehensively: 1) ✅ Valid CSV import working correctly - imported 3 test cases successfully, 2) ✅ File format validation working - correctly rejects .txt files with proper error message, 3) ✅ Missing columns validation working - provides detailed format guide when required columns missing, 4) ✅ Data validation working - imports valid rows and reports specific errors for invalid priority/type values, 5) ✅ Empty file handling working - correctly rejects empty files, 6) ✅ Data integrity verified - imported test cases exist in database with correct data (title, priority, type, tab). CRITICAL FIX APPLIED: Fixed TestCase model creation issue (owner_id -> created_by). Complete test suite: 10/10 tests passed (100% success rate)."
+
 frontend:
   - task: "Forgot Password UI"
     implemented: true

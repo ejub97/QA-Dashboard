@@ -739,48 +739,37 @@ Invalid Type,Test with invalid type,medium,invalid-type,Test steps,Expected resu
     # Removed old methods - focusing on rename/delete functionality testing
 
 def main():
-    print("🚀 Starting QA Dashboard Project Rename/Delete Functionality Tests")
+    print("🚀 Starting QA Dashboard Import Test Cases Functionality Tests")
     print("=" * 80)
     
-    tester = QADashboardProjectRenameTester()
+    tester = QADashboardImportTester()
     
-    # Run comprehensive project rename/delete tests
+    # Run comprehensive import test cases tests
     test_results = []
     
-    print("\n🔄 === PROJECT RENAME/DELETE FUNCTIONALITY TESTING ===")
+    print("\n📥 === IMPORT TEST CASES FUNCTIONALITY TESTING ===")
     
     # User setup tests
     print("\n👤 Step 1: User Setup")
     test_results.append(tester.test_register_user())
     test_results.append(tester.test_login_user())
     test_results.append(tester.test_get_current_user())
-    test_results.append(tester.test_register_other_user())
     
     # Project creation tests
     print("\n📁 Step 2: Project Creation")
     test_results.append(tester.test_create_project())
-    test_results.append(tester.test_create_other_project())
     
-    # NEW FEATURE: Project rename tests
-    print("\n🔄 Step 3: Project Rename (NEW FEATURE)")
-    test_results.append(tester.test_project_rename_success())
-    test_results.append(tester.test_verify_project_renamed())
+    # Import test cases tests
+    print("\n📥 Step 3: Import Test Cases (NEW FEATURE)")
+    test_results.append(tester.test_import_valid_csv())
+    test_results.append(tester.test_import_invalid_file_format())
+    test_results.append(tester.test_import_missing_columns())
+    test_results.append(tester.test_import_invalid_data())
+    test_results.append(tester.test_import_empty_file())
     
-    # Permission tests
-    print("\n🔒 Step 4: Permission Tests")
-    test_results.append(tester.test_permission_rename_other_project())
-    test_results.append(tester.test_permission_delete_other_project())
-    
-    # Project delete tests
-    print("\n🗑️ Step 5: Project Delete")
-    test_results.append(tester.test_project_delete())
-    test_results.append(tester.test_verify_project_deleted())
-    
-    # Verify no breaking changes
-    print("\n✅ Step 6: Verify No Breaking Changes")
-    test_results.append(tester.test_get_projects())
-    test_results.append(tester.test_create_test_case())
-    test_results.append(tester.test_get_test_cases_by_project())
+    # Verify data integrity
+    print("\n✅ Step 4: Verify Data Integrity")
+    test_results.append(tester.test_verify_imported_data())
     
     # Print final results
     print("\n" + "=" * 80)
@@ -795,18 +784,19 @@ def main():
     
     # Test results summary
     if tester.tests_passed == tester.tests_run:
-        print("\n🎉 Project Rename/Delete Functionality Tests Successful!")
-        print("✅ NEW FEATURE: Project rename working correctly!")
-        print("✅ Project delete functionality working!")
-        print("✅ Permission system working (403 for unauthorized actions)!")
-        print("✅ No breaking changes detected in existing endpoints!")
-        print("✅ User registration with full_name field working!")
+        print("\n🎉 Import Test Cases Functionality Tests Successful!")
+        print("✅ NEW FEATURE: CSV import working correctly!")
+        print("✅ File format validation working!")
+        print("✅ Column validation working!")
+        print("✅ Data validation working!")
+        print("✅ Error handling working!")
+        print("✅ Data integrity verified!")
         return 0
     else:
-        print(f"\n❌ Project Rename/Delete Functionality Issues Detected!")
+        print(f"\n❌ Import Test Cases Functionality Issues Detected!")
         print(f"❌ {tester.tests_run - tester.tests_passed} tests failed!")
         print("🔍 Check the detailed output above for specific failures.")
-        print("🔧 New functionality may need fixes.")
+        print("🔧 Import functionality may need fixes.")
         return 1
 
 if __name__ == "__main__":

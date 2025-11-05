@@ -194,22 +194,29 @@ const TeamManagement = ({ project, isOwner, canManageTeam, onUpdate }) => {
         </ul>
       </div>
 
-      {/* Add Member Dialog */}
-      <Dialog open={showAddMember} onOpenChange={setShowAddMember}>
+      {/* Invite Member Dialog */}
+      <Dialog open={showAddMember} onOpenChange={(open) => {
+        setShowAddMember(open);
+        if (!open) setInviteLink('');
+      }}>
         <DialogContent data-testid="add-member-dialog">
           <DialogHeader>
-            <DialogTitle>Add Team Member</DialogTitle>
+            <DialogTitle>Invite Team Member</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="email">Email Address</Label>
               <Input
-                id="username"
-                placeholder="Enter username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                data-testid="add-member-username"
+                id="email"
+                type="email"
+                placeholder="Enter email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                data-testid="add-member-email"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                An invitation email will be sent to this address
+              </p>
             </div>
             <div>
               <Label htmlFor="role">Role</Label>
@@ -224,17 +231,29 @@ const TeamManagement = ({ project, isOwner, canManageTeam, onUpdate }) => {
                 </SelectContent>
               </Select>
             </div>
+            {inviteLink && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm font-medium text-green-900 mb-2">✅ Invitation Sent!</p>
+                <p className="text-xs text-green-700 mb-2">Invite link (for testing):</p>
+                <code className="text-xs bg-white p-2 rounded block overflow-x-auto">
+                  {inviteLink}
+                </code>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowAddMember(false)}>
-                Cancel
+              <Button variant="outline" onClick={() => {
+                setShowAddMember(false);
+                setInviteLink('');
+              }}>
+                Close
               </Button>
               <Button
-                onClick={handleAddMember}
+                onClick={handleSendInvite}
                 className="btn-dark"
                 disabled={loading}
                 data-testid="confirm-add-member"
               >
-                {loading ? 'Adding...' : 'Add Member'}
+                {loading ? 'Sending...' : 'Send Invitation'}
               </Button>
             </div>
           </div>

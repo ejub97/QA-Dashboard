@@ -181,6 +181,15 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+
+class InviteMemberRequest(BaseModel):
+    email: EmailStr
+    role: str
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+
+
 # ============ AUTH DEPENDENCIES ============
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):

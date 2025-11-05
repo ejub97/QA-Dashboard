@@ -454,27 +454,286 @@ class QADashboardImportTester:
 
     # Removed old test case methods - using PostgreSQL-specific tests
 
-    def test_get_test_cases_by_project(self):
-        """Test getting test cases by project (verify no breaking changes)"""
+    def test_import_valid_csv(self):
+        """Test importing valid CSV file"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        # Create valid CSV content
+        csv_content = """Title,Description,Priority,Type,Steps,Expected Result,Actual Result,Tab
+Test Login,Login functionality test,high,functional,"1. Open login page
+2. Enter valid credentials
+3. Click login button",User should be logged in successfully,,Authentication
+Test Logout,Logout functionality test,medium,functional,"1. Click logout button
+2. Verify redirect",User should be logged out,,Authentication
+Invalid Login,Test invalid credentials,high,negative,"1. Enter invalid credentials
+2. Click login",Should show error message,,Authentication"""
+        
+        csv_file = self.create_csv_file(csv_content)
+        
+        try:
+            url = f"{self.api_url}/test-cases/import/{self.project_id}"
+            headers = {'Authorization': f'Bearer {self.access_token}'} if self.access_token else {}
+            
+            self.tests_run += 1
+            print(f"\n🔍 Testing Valid CSV Import...")
+            print(f"   URL: {url}")
+            
+            with open(csv_file, 'rb') as f:
+                files = {'file': ('test_cases.csv', f, 'text/csv')}
+                response = requests.post(url, files=files, headers=headers)
+            
+            success = response.status_code == 200
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                response_data = response.json()
+                imported_count = response_data.get('imported_count', 0)
+                print(f"   ✅ Imported {imported_count} test cases")
+                if imported_count >= 3:
+                    print(f"   ✅ All test cases imported successfully")
+                    return True
+                else:
+                    print(f"   ❌ Expected at least 3 imports, got {imported_count}")
+                    return False
+            else:
+                self.failed_tests.append(f"Valid CSV Import: Expected 200, got {response.status_code}")
+                print(f"❌ Failed - Expected 200, got {response.status_code}")
+                try:
+                    error_data = response.json()
+                    print(f"   Error: {error_data}")
+                except:
+                    print(f"   Error: {response.text}")
+                return False
+        except Exception as e:
+            self.failed_tests.append(f"Valid CSV Import: Exception - {str(e)}")
+            print(f"❌ Failed - Error: {str(e)}")
+            return False
+        finally:
+            self.cleanup_file(csv_file)
+
+    def test_import_invalid_file_format(self):
+        """Test importing invalid file format (TXT)"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        # Create TXT file (invalid format)
+        txt_content = "This is a text file, not CSV or Excel"
+        txt_file = self.create_txt_file(txt_content)
+        
+        try:
+            url = f"{self.api_url}/test-cases/import/{self.project_id}"
+            headers = {'Authorization': f'Bearer {self.access_token}'} if self.access_token else {}
+            
+            self.tests_run += 1
+            print(f"\n🔍 Testing Invalid File Format (TXT)...")
+            print(f"   URL: {url}")
+            
+            with open(txt_file, 'rb') as f:
+                files = {'file': ('test_cases.txt', f, 'text/plain')}
+                response = requests.post(url, files=files, headers=headers)
+            
+            success = response.status_code == 400
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                response_data = response.json()
+                error_detail = response_data.get('detail', '')
+                if 'Unsupported file format' in error_detail:
+                    print(f"   ✅ Correct error message: {error_detail}")
+                    return True
+                else:
+                    print(f"   ❌ Unexpected error message: {error_detail}")
+                    return False
+            else:
+                self.failed_tests.append(f"Invalid File Format: Expected 400, got {response.status_code}")
+                print(f"❌ Failed - Expected 400, got {response.status_code}")
+                return False
+        except Exception as e:
+            self.failed_tests.append(f"Invalid File Format: Exception - {str(e)}")
+            print(f"❌ Failed - Error: {str(e)}")
+            return False
+        finally:
+            self.cleanup_file(txt_file)
+
+    def test_import_missing_columns(self):
+        """Test importing CSV with missing required columns"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        # Create CSV with missing required column (no "Title" column)
+        csv_content = """Description,Priority,Type,Steps,Expected Result
+Login test,high,functional,Enter credentials,Should login"""
+        
+        csv_file = self.create_csv_file(csv_content)
+        
+        try:
+            url = f"{self.api_url}/test-cases/import/{self.project_id}"
+            headers = {'Authorization': f'Bearer {self.access_token}'} if self.access_token else {}
+            
+            self.tests_run += 1
+            print(f"\n🔍 Testing Missing Required Columns...")
+            print(f"   URL: {url}")
+            
+            with open(csv_file, 'rb') as f:
+                files = {'file': ('missing_columns.csv', f, 'text/csv')}
+                response = requests.post(url, files=files, headers=headers)
+            
+            success = response.status_code == 400
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                response_data = response.json()
+                error_detail = response_data.get('detail', '')
+                if 'Missing columns' in error_detail or 'Required CSV/Excel Format' in error_detail:
+                    print(f"   ✅ Correct error with format guide provided")
+                    return True
+                else:
+                    print(f"   ❌ Unexpected error message: {error_detail}")
+                    return False
+            else:
+                self.failed_tests.append(f"Missing Columns: Expected 400, got {response.status_code}")
+                print(f"❌ Failed - Expected 400, got {response.status_code}")
+                return False
+        except Exception as e:
+            self.failed_tests.append(f"Missing Columns: Exception - {str(e)}")
+            print(f"❌ Failed - Error: {str(e)}")
+            return False
+        finally:
+            self.cleanup_file(csv_file)
+
+    def test_import_invalid_data(self):
+        """Test importing CSV with invalid data values"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        # Create CSV with invalid priority and type values
+        csv_content = """Title,Description,Priority,Type,Steps,Expected Result,Actual Result,Tab
+Valid Test,Valid test case,high,functional,Test steps,Expected result,,General
+Invalid Priority,Test with invalid priority,super-high,functional,Test steps,Expected result,,General
+Invalid Type,Test with invalid type,medium,invalid-type,Test steps,Expected result,,General"""
+        
+        csv_file = self.create_csv_file(csv_content)
+        
+        try:
+            url = f"{self.api_url}/test-cases/import/{self.project_id}"
+            headers = {'Authorization': f'Bearer {self.access_token}'} if self.access_token else {}
+            
+            self.tests_run += 1
+            print(f"\n🔍 Testing Invalid Data Values...")
+            print(f"   URL: {url}")
+            
+            with open(csv_file, 'rb') as f:
+                files = {'file': ('invalid_data.csv', f, 'text/csv')}
+                response = requests.post(url, files=files, headers=headers)
+            
+            success = response.status_code == 200
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                response_data = response.json()
+                imported_count = response_data.get('imported_count', 0)
+                errors = response_data.get('errors', [])
+                
+                if imported_count >= 1 and len(errors) >= 2:
+                    print(f"   ✅ Imported {imported_count} valid test case(s)")
+                    print(f"   ✅ Reported {len(errors)} validation errors")
+                    for error in errors[:2]:  # Show first 2 errors
+                        print(f"   ✅ Error: {error}")
+                    return True
+                else:
+                    print(f"   ❌ Expected 1+ imports and 2+ errors, got {imported_count} imports and {len(errors)} errors")
+                    return False
+            else:
+                self.failed_tests.append(f"Invalid Data: Expected 200, got {response.status_code}")
+                print(f"❌ Failed - Expected 200, got {response.status_code}")
+                return False
+        except Exception as e:
+            self.failed_tests.append(f"Invalid Data: Exception - {str(e)}")
+            print(f"❌ Failed - Error: {str(e)}")
+            return False
+        finally:
+            self.cleanup_file(csv_file)
+
+    def test_import_empty_file(self):
+        """Test importing empty CSV file"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        # Create empty CSV file
+        csv_content = ""
+        csv_file = self.create_csv_file(csv_content)
+        
+        try:
+            url = f"{self.api_url}/test-cases/import/{self.project_id}"
+            headers = {'Authorization': f'Bearer {self.access_token}'} if self.access_token else {}
+            
+            self.tests_run += 1
+            print(f"\n🔍 Testing Empty File...")
+            print(f"   URL: {url}")
+            
+            with open(csv_file, 'rb') as f:
+                files = {'file': ('empty.csv', f, 'text/csv')}
+                response = requests.post(url, files=files, headers=headers)
+            
+            success = response.status_code == 400
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                response_data = response.json()
+                error_detail = response_data.get('detail', '')
+                if 'empty' in error_detail.lower():
+                    print(f"   ✅ Correct error message: {error_detail}")
+                    return True
+                else:
+                    print(f"   ❌ Unexpected error message: {error_detail}")
+                    return False
+            else:
+                self.failed_tests.append(f"Empty File: Expected 400, got {response.status_code}")
+                print(f"❌ Failed - Expected 400, got {response.status_code}")
+                return False
+        except Exception as e:
+            self.failed_tests.append(f"Empty File: Exception - {str(e)}")
+            print(f"❌ Failed - Error: {str(e)}")
+            return False
+        finally:
+            self.cleanup_file(csv_file)
+
+    def test_verify_imported_data(self):
+        """Verify imported test cases exist in the database"""
         if not self.project_id:
             print("❌ Skipping - No project ID available")
             return False
         
         success, response = self.run_test(
-            "Get Test Cases by Project (No Breaking Changes)",
+            "Verify Imported Test Cases",
             "GET",
             f"test-cases?project_id={self.project_id}",
             200
         )
         if success and isinstance(response, list):
-            print(f"   ✅ Retrieved {len(response)} test cases")
-            print(f"   ✅ GET /api/test-cases endpoint still working")
-            # Check if our created test case is in the list
-            if response:
-                test_case = response[0]
-                print(f"   ✅ Test case title: {test_case.get('title', 'N/A')}")
-                print(f"   ✅ Test case status: {test_case.get('status', 'N/A')}")
-            return True
+            imported_cases = [tc for tc in response if 'Login' in tc.get('title', '')]
+            print(f"   ✅ Retrieved {len(response)} total test cases")
+            print(f"   ✅ Found {len(imported_cases)} imported test cases")
+            
+            if imported_cases:
+                # Check specific imported test case
+                login_test = next((tc for tc in imported_cases if 'Test Login' in tc.get('title', '')), None)
+                if login_test:
+                    print(f"   ✅ Login test case found:")
+                    print(f"      - Title: {login_test.get('title')}")
+                    print(f"      - Priority: {login_test.get('priority')}")
+                    print(f"      - Type: {login_test.get('type')}")
+                    print(f"      - Tab: {login_test.get('tab')}")
+                    return True
+            
+            print(f"   ❌ No imported test cases found")
+            return False
         return False
 
     # Removed old methods - focusing on rename/delete functionality testing

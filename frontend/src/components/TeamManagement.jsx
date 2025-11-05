@@ -23,30 +23,33 @@ const API = `${BACKEND_URL}/api`;
 
 const TeamManagement = ({ project, isOwner, canManageTeam, onUpdate }) => {
   const [showAddMember, setShowAddMember] = useState(false);
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [role, setRole] = useState('viewer');
   const [loading, setLoading] = useState(false);
   const [removeMember, setRemoveMember] = useState(null);
+  const [inviteLink, setInviteLink] = useState('');
 
-  const handleAddMember = async () => {
-    if (!username.trim()) {
-      // 'Please enter a username');
+  const handleSendInvite = async () => {
+    if (!email.trim()) {
+      alert('Please enter an email address');
       return;
     }
 
     setLoading(true);
     try {
-      await axios.post(`${API}/projects/${project.id}/members`, {
-        username,
+      const response = await axios.post(`${API}/projects/${project.id}/invites`, {
+        email,
         role
       });
-      // `Added ${username} as ${role}`);
-      setUsername('');
+      console.log('Invitation sent successfully');
+      setInviteLink(response.data.invite_link);
+      alert(`Invitation sent to ${email}! They will receive an email with instructions.`);
+      setEmail('');
       setRole('viewer');
-      setShowAddMember(false);
-      if (onUpdate) onUpdate();
+      // Keep dialog open to show invite link
     } catch (error) {
-      // error.response?.data?.detail || 'Failed to add member');
+      console.error('Failed to send invitation', error);
+      alert('Failed to send invitation: ' + (error.response?.data?.detail || error.message));
     } finally {
       setLoading(false);
     }

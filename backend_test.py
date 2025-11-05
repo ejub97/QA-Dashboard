@@ -4,6 +4,9 @@ import json
 import re
 from datetime import datetime
 import uuid
+import io
+import tempfile
+import os
 
 class QADashboardProjectRenameTester:
     def __init__(self, base_url="https://testcenter.preview.emergentagent.com"):

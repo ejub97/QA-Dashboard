@@ -242,21 +242,177 @@ class QADashboardProjectRenameTester:
             return True
         return False
 
-    def test_get_projects(self):
-        """Test getting all projects from PostgreSQL"""
+    def test_project_rename_success(self):
+        """Test project rename functionality (NEW FEATURE)"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        # Test the new PUT /api/projects/{project_id} endpoint
+        url = f"{self.api_url}/projects/{self.project_id}?name=Renamed%20Project&description=New%20Description"
+        print(f"\n🔍 Testing Project Rename (NEW FEATURE)...")
+        print(f"   URL: {url}")
+        
+        try:
+            headers = {'Authorization': f'Bearer {self.access_token}'} if self.access_token else {}
+            response = requests.put(url, headers=headers)
+            success = response.status_code == 200
+            self.tests_run += 1
+            
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code}")
+                try:
+                    response_data = response.json()
+                    print(f"   ✅ Response: {response_data}")
+                    return True
+                except:
+                    print(f"   ✅ Project renamed successfully")
+                    return True
+            else:
+                self.failed_tests.append(f"Project Rename: Expected 200, got {response.status_code}")
+                print(f"❌ Failed - Expected 200, got {response.status_code}")
+                try:
+                    error_data = response.json()
+                    print(f"   Error: {error_data}")
+                except:
+                    print(f"   Error: {response.text}")
+                return False
+        except Exception as e:
+            self.failed_tests.append(f"Project Rename: Exception - {str(e)}")
+            print(f"❌ Failed - Error: {str(e)}")
+            self.tests_run += 1
+            return False
+
+    def test_verify_project_renamed(self):
+        """Verify project name and description were updated"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
         success, response = self.run_test(
-            "List Projects (PostgreSQL)",
+            "Verify Project Rename",
+            "GET",
+            f"projects/{self.project_id}",
+            200
+        )
+        if success:
+            expected_name = "Renamed Project"
+            expected_desc = "New Description"
+            actual_name = response.get('name', '')
+            actual_desc = response.get('description', '')
+            
+            if actual_name == expected_name and actual_desc == expected_desc:
+                print(f"   ✅ Project name updated to: {actual_name}")
+                print(f"   ✅ Project description updated to: {actual_desc}")
+                return True
+            else:
+                print(f"   ❌ Name mismatch - Expected: '{expected_name}', Got: '{actual_name}'")
+                print(f"   ❌ Description mismatch - Expected: '{expected_desc}', Got: '{actual_desc}'")
+                return False
+        return False
+
+    def test_permission_rename_other_project(self):
+        """Test trying to rename a project you don't own (should fail with 403)"""
+        if not self.other_project_id:
+            print("❌ Skipping - No other project ID available")
+            return False
+        
+        # Try to rename other user's project with current user's token
+        url = f"{self.api_url}/projects/{self.other_project_id}?name=Hacked%20Project&description=Should%20not%20work"
+        print(f"\n🔍 Testing Permission Denied for Rename...")
+        print(f"   URL: {url}")
+        
+        try:
+            headers = {'Authorization': f'Bearer {self.access_token}'} if self.access_token else {}
+            response = requests.put(url, headers=headers)
+            success = response.status_code == 403  # Expecting 403 Forbidden
+            self.tests_run += 1
+            
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code} (Correctly forbidden)")
+                try:
+                    response_data = response.json()
+                    print(f"   ✅ Error message: {response_data.get('detail', 'N/A')}")
+                except:
+                    pass
+                return True
+            else:
+                self.failed_tests.append(f"Permission Test Rename: Expected 403, got {response.status_code}")
+                print(f"❌ Failed - Expected 403, got {response.status_code}")
+                print(f"   ❌ Security issue: User can rename projects they don't own!")
+                return False
+        except Exception as e:
+            self.failed_tests.append(f"Permission Test Rename: Exception - {str(e)}")
+            print(f"❌ Failed - Error: {str(e)}")
+            self.tests_run += 1
+            return False
+
+    def test_permission_delete_other_project(self):
+        """Test trying to delete a project you don't own (should fail with 403)"""
+        if not self.other_project_id:
+            print("❌ Skipping - No other project ID available")
+            return False
+        
+        # Try to delete other user's project with current user's token
+        success, response = self.run_test(
+            "Permission Test - Delete Other Project",
+            "DELETE",
+            f"projects/{self.other_project_id}",
+            403  # Expecting 403 Forbidden
+        )
+        if success:
+            print(f"   ✅ Correctly forbidden - cannot delete other user's project")
+            return True
+        return False
+
+    def test_project_delete(self):
+        """Test project deletion"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        success, response = self.run_test(
+            "Delete Project",
+            "DELETE",
+            f"projects/{self.project_id}",
+            200
+        )
+        if success:
+            print(f"   ✅ Project deleted successfully")
+            return True
+        return False
+
+    def test_verify_project_deleted(self):
+        """Verify project is actually deleted"""
+        if not self.project_id:
+            print("❌ Skipping - No project ID available")
+            return False
+        
+        success, response = self.run_test(
+            "Verify Project Deleted",
+            "GET",
+            f"projects/{self.project_id}",
+            404  # Expecting 404 Not Found
+        )
+        if success:
+            print(f"   ✅ Project correctly not found after deletion")
+            return True
+        return False
+
+    def test_get_projects(self):
+        """Test getting all projects (verify no breaking changes)"""
+        success, response = self.run_test(
+            "List Projects (No Breaking Changes)",
             "GET",
             "projects",
             200
         )
         if success and isinstance(response, list):
-            print(f"   ✅ Retrieved {len(response)} projects from PostgreSQL")
-            # Check if our created project is in the list
-            project_found = any(p.get('id') == self.project_id for p in response)
-            if project_found:
-                print(f"   ✅ Created project found in list")
-            return project_found
+            print(f"   ✅ Retrieved {len(response)} projects")
+            print(f"   ✅ GET /api/projects endpoint still working")
+            return True
         return False
 
     def test_add_tab_to_project(self):

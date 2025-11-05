@@ -926,6 +926,160 @@ async def add_comment(
     return comment
 
 
+
+# ============ IMPORT TEST CASES ============
+
+@api_router.post("/test-cases/import/{project_id}")
+async def import_test_cases(
+    project_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Import test cases from CSV or Excel file with validation"""
+    # Check project permission
+    project = await check_project_permission(project_id, current_user, "editor")
+    
+    # Validate file type
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+    
+    allowed_extensions = ['.csv', '.xlsx', '.xls']
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file format: {file_ext}. Allowed formats: CSV (.csv), Excel (.xlsx, .xls)"
+        )
+    
+    # Read file contents
+    try:
+        contents = await file.read()
+        
+        # Parse file based on type
+        if file_ext == '.csv':
+            df = pd.read_csv(io.BytesIO(contents))
+        else:  # xlsx or xls
+            df = pd.read_excel(io.BytesIO(contents))
+        
+        # Validate required columns
+        required_columns = ['Title', 'Description', 'Priority', 'Type', 'Steps', 'Expected Result']
+        missing_columns = [col for col in required_columns if col not in df.columns and col.lower() not in df.columns]
+        
+        if missing_columns:
+            # Create file format guide
+            format_guide = """
+Required CSV/Excel Format:
+--------------------------
+Columns (case-insensitive):
+1. Title (required) - Test case title
+2. Description (required) - Test case description  
+3. Priority (required) - low, medium, or high
+4. Type (required) - functional, negative, UI/UX, smoke, regression, or API
+5. Steps (required) - Test steps (numbered steps separated by newlines)
+6. Expected Result (required) - Expected outcome
+7. Actual Result (optional) - Actual outcome (leave empty for new test cases)
+8. Tab (optional) - Tab/section name (defaults to 'General')
+
+Example CSV:
+Title,Description,Priority,Type,Steps,Expected Result,Actual Result,Tab
+Login with valid credentials,Test successful login,high,functional,"1. Open login page
+2. Enter username
+3. Enter password
+4. Click login",User should be logged in,,Authentication
+
+Missing columns in your file: """ + ', '.join(missing_columns)
+            
+            raise HTTPException(status_code=400, detail=format_guide)
+        
+        # Validate and import test cases
+        imported_count = 0
+        errors = []
+        
+        for index, row in df.iterrows():
+            row_num = index + 2  # +2 because Excel rows start at 1 and header is row 1
+            
+            try:
+                # Get values (handle both capitalized and lowercase column names)
+                title = str(row.get('Title', row.get('title', ''))).strip()
+                description = str(row.get('Description', row.get('description', ''))).strip()
+                priority = str(row.get('Priority', row.get('priority', 'medium'))).strip().lower()
+                test_type = str(row.get('Type', row.get('type', 'functional'))).strip().lower()
+                steps = str(row.get('Steps', row.get('steps', ''))).strip()
+                expected_result = str(row.get('Expected Result', row.get('expected_result', row.get('expected result', '')))).strip()
+                actual_result = str(row.get('Actual Result', row.get('actual_result', row.get('actual result', '')))).strip()
+                tab = str(row.get('Tab', row.get('tab', 'General'))).strip()
+                
+                # Skip empty rows
+                if not title or title == 'nan':
+                    continue
+                
+                # Validate priority
+                valid_priorities = ['low', 'medium', 'high']
+                if priority not in valid_priorities:
+                    errors.append(f"Row {row_num}: Invalid priority '{priority}'. Must be one of: {', '.join(valid_priorities)}")
+                    continue
+                
+                # Validate type
+                valid_types = ['functional', 'negative', 'ui/ux', 'smoke', 'regression', 'api']
+                if test_type not in valid_types:
+                    errors.append(f"Row {row_num}: Invalid type '{test_type}'. Must be one of: {', '.join(valid_types)}")
+                    continue
+                
+                # Create test case
+                tc_data = TestCaseCreate(
+                    project_id=project_id,
+                    tab=tab,
+                    title=title,
+                    description=description,
+                    priority=priority,
+                    type=test_type,
+                    steps=steps,
+                    expected_result=expected_result,
+                    actual_result=actual_result if actual_result and actual_result != 'nan' else ""
+                )
+                
+                # Convert to TestCase model
+                tc = TestCase(**tc_data.model_dump(), owner_id=current_user['id'])
+                
+                # Prepare document for MongoDB
+                doc = tc.model_dump()
+                doc['created_at'] = doc['created_at'].isoformat()
+                doc['updated_at'] = doc['updated_at'].isoformat()
+                if doc.get('executed_at'):
+                    doc['executed_at'] = doc['executed_at'].isoformat()
+                
+                # Insert into database
+                await db.test_cases.insert_one(doc)
+                
+                # Add tab to project if it doesn't exist
+                if tab and tab != 'General':
+                    await db.projects.update_one(
+                        {"id": project_id},
+                        {"$addToSet": {"tabs": tab}}
+                    )
+                
+                imported_count += 1
+                
+            except Exception as e:
+                errors.append(f"Row {row_num}: {str(e)}")
+        
+        # Return result with any errors
+        result = {"imported_count": imported_count}
+        if errors:
+            result["errors"] = errors[:10]  # Limit to first 10 errors
+            result["total_errors"] = len(errors)
+        
+        return result
+        
+    except pd.errors.EmptyDataError:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty")
+    except pd.errors.ParserError as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Import failed: {str(e)}")
+
+
 # ============ EXPORT ROUTES (Viewer can access) ============
 
 @api_router.get("/test-cases/export/excel/{project_id}")

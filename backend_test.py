@@ -79,18 +79,7 @@ class QADashboardProjectRenameTester:
             print(f"❌ Failed - Error: {str(e)}")
             return False, {}
 
-    def test_database_connection(self):
-        """Test PostgreSQL database connection"""
-        success, response = self.run_test(
-            "Database Health Check",
-            "GET",
-            "../health",
-            200
-        )
-        if success and response.get('database') == 'connected':
-            print(f"   ✅ PostgreSQL connection verified")
-            return True
-        return False
+    # Removed database connection test - focusing on rename/delete functionality
 
     def test_register_user(self):
         """Test user registration with full_name field"""

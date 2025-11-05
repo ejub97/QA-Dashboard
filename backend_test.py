@@ -415,25 +415,7 @@ class QADashboardProjectRenameTester:
             return True
         return False
 
-    def test_add_tab_to_project(self):
-        """Test adding tab to project in PostgreSQL"""
-        if not self.project_id:
-            print("❌ Skipping - No project ID available")
-            return False
-        
-        success, response = self.run_test(
-            "Add Tab to Project (PostgreSQL)",
-            "POST",
-            f"projects/{self.project_id}/tabs?tab_name=TestTab",
-            200
-        )
-        if success and response.get('message') == 'Tab added successfully':
-            print(f"   ✅ Tab added successfully")
-            print(f"   ✅ Updated tabs: {response.get('tabs', [])}")
-            return True
-        return False
-
-    # Removed old project test methods - using PostgreSQL-specific tests
+    # Removed old methods - focusing on rename/delete functionality
 
     def test_create_test_case(self):
         """Test test case creation (verify no breaking changes)"""

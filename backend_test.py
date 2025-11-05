@@ -204,32 +204,7 @@ class QADashboardImportTester:
             return True
         return False
 
-    def test_create_other_project(self):
-        """Test creating project with other user for permission testing"""
-        # Switch to other user's token
-        original_token = self.access_token
-        self.access_token = self.other_access_token
-        
-        project_data = {
-            "name": "Other User Project",
-            "description": "Project owned by other user"
-        }
-        success, response = self.run_test(
-            "Create Project with Other User",
-            "POST",
-            "projects",
-            200,
-            data=project_data
-        )
-        
-        # Switch back to original token
-        self.access_token = original_token
-        
-        if success and 'id' in response:
-            self.other_project_id = response['id']
-            print(f"   ✅ Other project created with ID: {self.other_project_id}")
-            return True
-        return False
+    # Import test methods start here
 
     def test_project_rename_success(self):
         """Test project rename functionality (NEW FEATURE)"""

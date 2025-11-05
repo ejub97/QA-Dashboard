@@ -525,9 +525,11 @@ const TestCaseList = ({ project, userRole }) => {
           <div className="flex items-start gap-2 mb-4">
             <TabsList className="justify-start">
               {tabs.map((tab) => (
-                <TabsTrigger key={tab} value={tab} data-testid={`tab-${tab}`} className="relative group">
-                  {tab} ({testCases.filter(tc => tc.tab === tab).length})
-                  <div className="absolute -top-1 -right-1 hidden group-hover:flex gap-1">
+                <div key={tab} className="relative group">
+                  <TabsTrigger value={tab} data-testid={`tab-${tab}`}>
+                    {tab} ({testCases.filter(tc => tc.tab === tab).length})
+                  </TabsTrigger>
+                  <div className="absolute -top-1 -right-1 hidden group-hover:flex gap-1 z-10">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -552,7 +554,7 @@ const TestCaseList = ({ project, userRole }) => {
                       </button>
                     )}
                   </div>
-                </TabsTrigger>
+                </div>
               ))}
             </TabsList>
           </div>

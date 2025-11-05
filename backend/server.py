@@ -26,7 +26,8 @@ from auth import (
 from email_service import (
     generate_reset_token,
     get_token_expiry,
-    send_password_reset_email
+    send_password_reset_email,
+    send_invite_email
 )
 
 ROOT_DIR = Path(__file__).parent

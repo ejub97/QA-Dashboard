@@ -484,19 +484,20 @@ class QADashboardProjectRenameTester:
     # Removed old test case methods - using PostgreSQL-specific tests
 
     def test_get_test_cases_by_project(self):
-        """Test getting test cases by project from PostgreSQL"""
+        """Test getting test cases by project (verify no breaking changes)"""
         if not self.project_id:
             print("❌ Skipping - No project ID available")
             return False
         
         success, response = self.run_test(
-            "Get Test Cases by Project (PostgreSQL)",
+            "Get Test Cases by Project (No Breaking Changes)",
             "GET",
-            f"testcases/{self.project_id}",
+            f"test-cases?project_id={self.project_id}",
             200
         )
         if success and isinstance(response, list):
-            print(f"   ✅ Retrieved {len(response)} test cases from PostgreSQL")
+            print(f"   ✅ Retrieved {len(response)} test cases")
+            print(f"   ✅ GET /api/test-cases endpoint still working")
             # Check if our created test case is in the list
             if response:
                 test_case = response[0]

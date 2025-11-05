@@ -818,26 +818,60 @@ const TestCaseList = ({ project, userRole }) => {
 
         {/* Import Dialog */}
         <Dialog open={showImport} onOpenChange={setShowImport}>
-          <DialogContent data-testid="import-dialog">
+          <DialogContent className="max-w-2xl" data-testid="import-dialog">
             <DialogHeader>
               <DialogTitle>Import Test Cases</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-semibold text-sm mb-2">📋 Required File Format</h4>
+                <div className="text-xs space-y-1 text-gray-700">
+                  <p><strong>Supported formats:</strong> CSV (.csv), Excel (.xlsx, .xls)</p>
+                  <p className="mt-2"><strong>Required Columns:</strong></p>
+                  <ul className="list-disc ml-5 space-y-1">
+                    <li><strong>Title</strong> - Test case title</li>
+                    <li><strong>Description</strong> - Test case description</li>
+                    <li><strong>Priority</strong> - low, medium, or high</li>
+                    <li><strong>Type</strong> - functional, negative, UI/UX, smoke, regression, or API</li>
+                    <li><strong>Steps</strong> - Test steps (use line breaks for numbered steps)</li>
+                    <li><strong>Expected Result</strong> - Expected outcome</li>
+                  </ul>
+                  <p className="mt-2"><strong>Optional Columns:</strong></p>
+                  <ul className="list-disc ml-5">
+                    <li><strong>Actual Result</strong> - Leave empty for new test cases</li>
+                    <li><strong>Tab</strong> - Tab/section name (defaults to 'General')</li>
+                  </ul>
+                </div>
+              </div>
+              
               <div>
-                <Label>Select Excel or Word file</Label>
+                <Label>Select CSV or Excel file</Label>
                 <Input
                   type="file"
-                  accept=".xlsx,.xls,.docx"
+                  accept=".xlsx,.xls,.csv"
                   onChange={(e) => setImportFile(e.target.files[0])}
                   data-testid="import-file-input"
                 />
-                <p className="text-xs text-gray-500 mt-2">
-                  File should include columns: Title, Description, Priority, Type, Steps, Expected Result, Tab (optional)
-                </p>
+                {importFile && (
+                  <p className="text-xs text-green-600 mt-2">
+                    ✓ Selected: {importFile.name}
+                  </p>
+                )}
               </div>
+              
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowImport(false)}>Cancel</Button>
-                <Button onClick={handleImport} className="btn-dark" data-testid="confirm-import-btn">Import</Button>
+                <Button variant="outline" onClick={() => {
+                  setShowImport(false);
+                  setImportFile(null);
+                }}>Cancel</Button>
+                <Button 
+                  onClick={handleImport} 
+                  className="btn-dark" 
+                  disabled={!importFile}
+                  data-testid="confirm-import-btn"
+                >
+                  Import
+                </Button>
               </div>
             </div>
           </DialogContent>

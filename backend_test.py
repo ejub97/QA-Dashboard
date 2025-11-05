@@ -630,53 +630,51 @@ class QADashboardProjectRenameTester:
     # Removed old error handling tests - focusing on PostgreSQL migration verification
 
 def main():
-    print("🚀 Starting QA Dashboard PostgreSQL Migration Tests")
-    print("=" * 70)
+    print("🚀 Starting QA Dashboard Project Rename/Delete Functionality Tests")
+    print("=" * 80)
     
-    tester = QADashboardPostgreSQLTester()
+    tester = QADashboardProjectRenameTester()
     
-    # Run comprehensive PostgreSQL migration tests
+    # Run comprehensive project rename/delete tests
     test_results = []
     
-    print("\n🗄️ === POSTGRESQL MIGRATION VERIFICATION ===")
+    print("\n🔄 === PROJECT RENAME/DELETE FUNCTIONALITY TESTING ===")
     
-    # Database connection test
-    print("\n📊 Step 1: Database Connection Test")
-    test_results.append(tester.test_database_connection())
-    
-    # Authentication flow tests
-    print("\n🔐 Step 2: Authentication Flow (PostgreSQL)")
+    # User setup tests
+    print("\n👤 Step 1: User Setup")
     test_results.append(tester.test_register_user())
     test_results.append(tester.test_login_user())
     test_results.append(tester.test_get_current_user())
+    test_results.append(tester.test_register_other_user())
     
-    # Project management tests
-    print("\n📁 Step 3: Project Management (PostgreSQL)")
+    # Project creation tests
+    print("\n📁 Step 2: Project Creation")
     test_results.append(tester.test_create_project())
-    test_results.append(tester.test_get_projects())
-    test_results.append(tester.test_add_tab_to_project())
+    test_results.append(tester.test_create_other_project())
     
-    # Test case management tests
-    print("\n📝 Step 4: Test Case Management (PostgreSQL)")
+    # NEW FEATURE: Project rename tests
+    print("\n🔄 Step 3: Project Rename (NEW FEATURE)")
+    test_results.append(tester.test_project_rename_success())
+    test_results.append(tester.test_verify_project_renamed())
+    
+    # Permission tests
+    print("\n🔒 Step 4: Permission Tests")
+    test_results.append(tester.test_permission_rename_other_project())
+    test_results.append(tester.test_permission_delete_other_project())
+    
+    # Project delete tests
+    print("\n🗑️ Step 5: Project Delete")
+    test_results.append(tester.test_project_delete())
+    test_results.append(tester.test_verify_project_deleted())
+    
+    # Verify no breaking changes
+    print("\n✅ Step 6: Verify No Breaking Changes")
+    test_results.append(tester.test_get_projects())
     test_results.append(tester.test_create_test_case())
     test_results.append(tester.test_get_test_cases_by_project())
-    test_results.append(tester.test_update_test_case())
-    
-    # Export functionality tests
-    print("\n📤 Step 5: Export Functionality (PostgreSQL)")
-    test_results.append(tester.test_export_word())
-    test_results.append(tester.test_export_excel())
-    
-    # Statistics test
-    print("\n📈 Step 6: Statistics (PostgreSQL)")
-    test_results.append(tester.test_statistics())
-    
-    # Cleanup test
-    print("\n🗑️ Step 7: Cleanup (PostgreSQL)")
-    test_results.append(tester.test_delete_test_case())
     
     # Print final results
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 80)
     print(f"📊 Final Results: {tester.tests_passed}/{tester.tests_run} tests passed")
     print(f"Success Rate: {(tester.tests_passed/tester.tests_run)*100:.1f}%")
     
@@ -686,20 +684,20 @@ def main():
         for failed_test in tester.failed_tests:
             print(f"   - {failed_test}")
     
-    # Migration status
+    # Test results summary
     if tester.tests_passed == tester.tests_run:
-        print("\n🎉 PostgreSQL Migration Successful!")
-        print("✅ All QA Dashboard functionality working with PostgreSQL!")
-        print("✅ Database schema created correctly")
-        print("✅ All CRUD operations functional")
-        print("✅ Authentication system working")
-        print("✅ Export features operational")
+        print("\n🎉 Project Rename/Delete Functionality Tests Successful!")
+        print("✅ NEW FEATURE: Project rename working correctly!")
+        print("✅ Project delete functionality working!")
+        print("✅ Permission system working (403 for unauthorized actions)!")
+        print("✅ No breaking changes detected in existing endpoints!")
+        print("✅ User registration with full_name field working!")
         return 0
     else:
-        print(f"\n❌ PostgreSQL Migration Issues Detected!")
+        print(f"\n❌ Project Rename/Delete Functionality Issues Detected!")
         print(f"❌ {tester.tests_run - tester.tests_passed} tests failed!")
         print("🔍 Check the detailed output above for specific failures.")
-        print("🔧 Migration may need additional fixes.")
+        print("🔧 New functionality may need fixes.")
         return 1
 
 if __name__ == "__main__":

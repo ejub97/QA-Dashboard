@@ -527,6 +527,140 @@ async def remove_project_member(
     
     return {"message": "Member removed successfully"}
 
+
+# ============ PROJECT INVITE ENDPOINTS ============
+
+@api_router.post("/projects/{project_id}/invites")
+async def invite_member_by_email(
+    project_id: str,
+    invite_data: InviteMemberRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Send email invite to add a member to the project"""
+    project = await check_project_permission(project_id, current_user, "admin")
+    
+    # Generate invite token
+    invite_token = generate_reset_token()
+    invite_expiry = get_token_expiry()  # 1 hour expiry
+    
+    # Store invite in database
+    invite = {
+        "id": str(uuid.uuid4()),
+        "project_id": project_id,
+        "project_name": project["name"],
+        "email": invite_data.email,
+        "role": invite_data.role,
+        "token": invite_token,
+        "expires_at": invite_expiry.isoformat(),
+        "invited_by": current_user["id"],
+        "invited_by_username": current_user["username"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "pending"  # pending, accepted, expired
+    }
+    
+    await db.invites.insert_one(invite)
+    
+    # Send email with invite link
+    frontend_url = os.environ.get('FRONTEND_URL', 'https://testcenter.preview.emergentagent.com')
+    invite_link = f"{frontend_url}/accept-invite/{invite_token}"
+    
+    # Send email using SendGrid
+    await send_invite_email(
+        invite_data.email,
+        invite_token,
+        project["name"],
+        current_user["username"],
+        invite_data.role
+    )
+    
+    return {
+        "message": f"Invitation sent to {invite_data.email}",
+        "invite_link": invite_link  # For testing purposes
+    }
+
+@api_router.get("/invites/{token}")
+async def get_invite_details(token: str):
+    """Get invite details (doesn't require authentication)"""
+    invite = await db.invites.find_one({"token": token}, {"_id": 0})
+    
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    
+    # Check if expired
+    if datetime.fromisoformat(invite["expires_at"]) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Invite has expired")
+    
+    if invite["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Invite already used")
+    
+    return {
+        "project_name": invite["project_name"],
+        "role": invite["role"],
+        "invited_by": invite["invited_by_username"],
+        "email": invite["email"]
+    }
+
+@api_router.post("/invites/{token}/accept")
+async def accept_invite(
+    token: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Accept project invite (user must be logged in)"""
+    invite = await db.invites.find_one({"token": token}, {"_id": 0})
+    
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    
+    # Check if expired
+    if datetime.fromisoformat(invite["expires_at"]) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Invite has expired")
+    
+    if invite["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Invite already used")
+    
+    # Verify email matches (optional - can be removed if you want any logged in user to accept)
+    if current_user["email"] != invite["email"]:
+        raise HTTPException(
+            status_code=403,
+            detail="This invite is for a different email address"
+        )
+    
+    # Check if already a member
+    project = await db.projects.find_one({"id": invite["project_id"]}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if any(m["user_id"] == current_user["id"] for m in project.get("members", [])):
+        raise HTTPException(status_code=400, detail="You are already a member of this project")
+    
+    # Add member to project
+    member = ProjectMember(
+        user_id=current_user["id"],
+        username=current_user["username"],
+        role=invite["role"]
+    )
+    
+    member_dict = member.model_dump()
+    member_dict['added_at'] = member_dict['added_at'].isoformat()
+    
+    await db.projects.update_one(
+        {"id": invite["project_id"]},
+        {"$push": {"members": member_dict}}
+    )
+    
+    # Mark invite as accepted
+    await db.invites.update_one(
+        {"token": token},
+        {"$set": {"status": "accepted", "accepted_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {
+        "message": "Invite accepted successfully",
+        "project_id": invite["project_id"],
+        "project_name": invite["project_name"]
+    }
+
+
 @api_router.get("/projects/{project_id}/tabs")
 async def get_project_tabs(project_id: str, current_user: dict = Depends(get_current_user)):
     await check_project_permission(project_id, current_user, "viewer")

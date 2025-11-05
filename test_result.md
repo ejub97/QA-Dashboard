@@ -340,7 +340,7 @@ metadata:
 
 test_plan:
   current_focus: 
-    - "User Authentication - Login"
+    - "Project Rename Functionality"
   stuck_tasks: 
     - "User Authentication - Login"
   test_all: false

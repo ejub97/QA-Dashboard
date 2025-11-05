@@ -93,14 +93,15 @@ class QADashboardProjectRenameTester:
         return False
 
     def test_register_user(self):
-        """Test user registration with PostgreSQL"""
+        """Test user registration with full_name field"""
         user_data = {
             "username": self.test_username,
             "email": self.test_user_email,
-            "password": self.test_user_password
+            "password": self.test_user_password,
+            "full_name": "Rename Test User"
         }
         success, response = self.run_test(
-            "Register New User (PostgreSQL)",
+            "Register New User with full_name",
             "POST",
             "auth/register",
             200,
@@ -109,6 +110,28 @@ class QADashboardProjectRenameTester:
         if success and 'access_token' in response:
             self.access_token = response['access_token']
             print(f"   ✅ User registered with ID: {response.get('user', {}).get('id', 'N/A')}")
+            print(f"   ✅ Full name: {response.get('user', {}).get('full_name', 'N/A')}")
+            return True
+        return False
+
+    def test_register_other_user(self):
+        """Test registering another user for permission testing"""
+        user_data = {
+            "username": self.other_username,
+            "email": self.other_user_email,
+            "password": self.other_user_password,
+            "full_name": "Other Test User"
+        }
+        success, response = self.run_test(
+            "Register Other User for Permission Test",
+            "POST",
+            "auth/register",
+            200,
+            data=user_data
+        )
+        if success and 'access_token' in response:
+            self.other_access_token = response['access_token']
+            print(f"   ✅ Other user registered with ID: {response.get('user', {}).get('id', 'N/A')}")
             return True
         return False
 

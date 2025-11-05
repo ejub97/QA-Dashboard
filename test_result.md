@@ -356,7 +356,7 @@ metadata:
 
 test_plan:
   current_focus: 
-    - "Project Rename Functionality"
+    - "Import Test Cases Functionality"
   stuck_tasks: 
     - "User Authentication - Login"
   test_all: false

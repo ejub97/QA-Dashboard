@@ -487,6 +487,13 @@ async def rename_project(
     description: str = "",
     current_user: dict = Depends(get_current_user)
 ):
+    # Validate input
+    try:
+        name = Validators.validate_project_name(name)
+        description = Validators.validate_description(description)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
     project = await db.projects.find_one({"id": project_id})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

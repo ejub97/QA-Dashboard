@@ -250,24 +250,37 @@ async def check_project_permission(project_id: str, user: dict, required_role: s
 # ============ AUTH ROUTES ============
 
 @api_router.post("/auth/register", response_model=Token)
-async def register(user_data: UserCreate):
+async def register(user_data: UserCreate, request: RateLimitRequest = None):
+    # Rate limiting
+    if request:
+        rate_limit_register(request)
+    
+    # Validate input
+    try:
+        username = Validators.validate_username(user_data.username)
+        email = Validators.validate_email(user_data.email)
+        full_name = Validators.validate_full_name(user_data.full_name)
+        Validators.validate_password(user_data.password)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
     # Check if username exists
-    existing_user = await db.users.find_one({"username": user_data.username})
+    existing_user = await db.users.find_one({"username": username})
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already registered")
     
     # Check if email exists
-    existing_email = await db.users.find_one({"email": user_data.email})
+    existing_email = await db.users.find_one({"email": email})
     if existing_email:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     # Create user
     hashed_password = get_password_hash(user_data.password)
     user = User(
-        username=user_data.username,
-        email=user_data.email,
+        username=username,
+        email=email,
         hashed_password=hashed_password,
-        full_name=user_data.full_name
+        full_name=full_name
     )
     
     user_dict = user.model_dump()

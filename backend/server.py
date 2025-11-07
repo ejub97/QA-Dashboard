@@ -419,9 +419,16 @@ async def reset_password(request: ResetPasswordRequest):
 
 @api_router.post("/projects", response_model=Project)
 async def create_project(input: ProjectCreate, current_user: dict = Depends(get_current_user)):
+    # Validate input
+    try:
+        name = Validators.validate_project_name(input.name)
+        description = Validators.validate_description(input.description)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
     project = Project(
-        name=input.name,
-        description=input.description,
+        name=name,
+        description=description,
         owner_id=current_user["id"],
         members=[]
     )

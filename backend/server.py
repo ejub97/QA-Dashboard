@@ -302,8 +302,20 @@ async def register(user_data: UserCreate, request: RateLimitRequest = None):
     return Token(access_token=access_token, token_type="bearer", user=user_response)
 
 @api_router.post("/auth/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = await db.users.find_one({"username": form_data.username}, {"_id": 0})
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), request: RateLimitRequest = None):
+    # Rate limiting
+    if request:
+        rate_limit_login(request)
+    
+    # Validate input
+    if not form_data.username or not form_data.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Username and password are required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    user = await db.users.find_one({"username": form_data.username.strip()}, {"_id": 0})
     if not user or not verify_password(form_data.password, user["hashed_password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

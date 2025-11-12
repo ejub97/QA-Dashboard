@@ -186,50 +186,51 @@ const Dashboard = () => {
                 <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
                   <DialogTrigger asChild>
                     <Button className="btn-dark flex-1 sm:flex-none" data-testid="create-project-btn">
-                    <Plus className="mr-2" size={18} />
-                    New Project
-                  </Button>
-                </DialogTrigger>
-              <DialogContent data-testid="project-dialog">
-                <DialogHeader>
-                  <DialogTitle>Create New Project</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={createProject} className="space-y-4">
-                  <div>
-                    <Label htmlFor="project-name">Project Name *</Label>
-                    <Input
-                      id="project-name"
-                      data-testid="project-name-input"
-                      placeholder="Enter project name"
-                      value={projectForm.name}
-                      onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
-                      className="input-focus"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="project-description">Description</Label>
-                    <Textarea
-                      id="project-description"
-                      data-testid="project-description-input"
-                      placeholder="Enter project description"
-                      value={projectForm.description}
-                      onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
-                      rows={3}
-                      className="input-focus"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button type="button" variant="outline" onClick={() => setShowProjectDialog(false)} data-testid="cancel-project-btn">
-                      Cancel
+                      <Plus className="mr-2" size={18} />
+                      New Project
                     </Button>
-                    <Button type="submit" className="btn-dark" data-testid="submit-project-btn">
-                      Create Project
-                    </Button>
-                  </div>
-                </form>
-              </DialogContent>
-            </Dialog>
+                  </DialogTrigger>
+                  <DialogContent data-testid="project-dialog">
+                    <DialogHeader>
+                      <DialogTitle>Create New Project</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={createProject} className="space-y-4">
+                      <div>
+                        <Label htmlFor="project-name">Project Name *</Label>
+                        <Input
+                          id="project-name"
+                          data-testid="project-name-input"
+                          placeholder="Enter project name"
+                          value={projectForm.name}
+                          onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+                          className="input-focus"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="project-description">Description</Label>
+                        <Textarea
+                          id="project-description"
+                          data-testid="project-description-input"
+                          placeholder="Enter project description"
+                          value={projectForm.description}
+                          onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                          rows={3}
+                          className="input-focus"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" onClick={() => setShowProjectDialog(false)} data-testid="cancel-project-btn">
+                          Cancel
+                        </Button>
+                        <Button type="submit" className="btn-dark" data-testid="submit-project-btn">
+                          Create Project
+                        </Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
           </div>
         </div>

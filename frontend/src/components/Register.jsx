@@ -55,7 +55,7 @@ const Register = () => {
         <div className="text-center mb-8">
           <FileText className="mx-auto mb-4 text-blue-600" size={48} />
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h1>
-          <p className="text-gray-600">Join QA Test Dashboard</p>
+          <p className="text-gray-600">Join QA Dashboard</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

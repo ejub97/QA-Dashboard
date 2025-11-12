@@ -34,7 +34,7 @@ const Login = () => {
       <div className="glass-effect rounded-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <FileText className="mx-auto mb-4 text-blue-600" size={48} />
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">QA Test Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">QA Dashboard</h1>
           <p className="text-gray-600">Sign in to manage your test cases</p>
         </div>
 

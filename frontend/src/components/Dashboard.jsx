@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { FileText, Plus, LogOut, Moon, Sun, User } from 'lucide-react';
+import { FileText, Plus, LogOut, Moon, Sun, User, ChevronDown, ChevronUp, Users } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -25,6 +25,7 @@ const Dashboard = () => {
   const [projectForm, setProjectForm] = useState({ name: '', description: '' });
   const [darkMode, setDarkMode] = useState(false);
   const [projectRefreshKey, setProjectRefreshKey] = useState(0);
+  const [showTeamManagement, setShowTeamManagement] = useState(false);
 
   useEffect(() => {
     const savedDarkMode = localStorage.getItem('darkMode') === 'true';

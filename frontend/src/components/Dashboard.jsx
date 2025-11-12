@@ -144,8 +144,8 @@ const Dashboard = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="glass-effect rounded-2xl p-6 mb-6">
-          <div className="flex flex-col gap-4">
-            {/* Title */}
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            {/* Title - Left side */}
             <div>
               <h1 className="text-4xl font-bold text-gray-900 mb-2" data-testid="dashboard-title">
                 <FileText className="inline-block mr-3 mb-1" size={36} />
@@ -154,10 +154,11 @@ const Dashboard = () => {
               <p className="text-gray-600">Manage your test cases efficiently</p>
             </div>
             
-            {/* Mobile: User info and Dark mode on top */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-3 order-1 sm:order-2">
-                <div className="text-left">
+            {/* Right side - Vertical stack on desktop, stacked on mobile */}
+            <div className="flex flex-col gap-3">
+              {/* Top row: User info and Dark mode */}
+              <div className="flex items-center gap-3 md:justify-end">
+                <div className="text-left md:text-right">
                   <p className="text-sm font-medium text-gray-900">{user?.full_name}</p>
                   <p className="text-xs text-gray-500">@{user?.username}</p>
                 </div>
@@ -172,20 +173,20 @@ const Dashboard = () => {
                 </Button>
               </div>
               
-              {/* Mobile: Logout and New Project buttons below */}
-              <div className="flex gap-2 order-2 sm:order-1">
+              {/* Bottom row: Logout and New Project buttons */}
+              <div className="flex gap-2">
                 <Button
                   variant="outline"
                   onClick={handleLogout}
                   data-testid="logout-btn"
-                  className="btn-secondary flex-1 sm:flex-none"
+                  className="btn-secondary flex-1 md:flex-none"
                 >
                   <LogOut size={16} className="mr-2" />
                   Logout
                 </Button>
                 <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
                   <DialogTrigger asChild>
-                    <Button className="btn-dark flex-1 sm:flex-none" data-testid="create-project-btn">
+                    <Button className="btn-dark flex-1 md:flex-none" data-testid="create-project-btn">
                       <Plus className="mr-2" size={18} />
                       New Project
                     </Button>

@@ -76,7 +76,7 @@ async def send_password_reset_email(email: str, reset_token: str, username: str)
           </div>
           <div class="content">
             <p>Hi <strong>{username}</strong>,</p>
-            <p>We received a request to reset your password for your QA Test Dashboard account.</p>
+            <p>We received a request to reset your password for your QA Dashboard account.</p>
             <p>Click the button below to reset your password:</p>
             <p style="text-align: center;">
               <a href="{reset_link}" class="button">Reset Password</a>
@@ -89,7 +89,7 @@ async def send_password_reset_email(email: str, reset_token: str, username: str)
             <p>If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.</p>
           </div>
           <div class="footer">
-            <p>QA Test Dashboard - Manage your test cases efficiently</p>
+            <p>QA Dashboard - Manage your test cases efficiently</p>
             <p>This is an automated email, please do not reply.</p>
           </div>
         </div>
@@ -103,7 +103,7 @@ async def send_password_reset_email(email: str, reset_token: str, username: str)
     
     Hi {username},
     
-    We received a request to reset your password for your QA Test Dashboard account.
+    We received a request to reset your password for your QA Dashboard account.
     
     Click the link below to reset your password:
     {reset_link}
@@ -113,7 +113,7 @@ async def send_password_reset_email(email: str, reset_token: str, username: str)
     If you didn't request this password reset, you can safely ignore this email.
     
     ---
-    QA Test Dashboard
+    QA Dashboard
     """
     
     part1 = MIMEText(text_body, "plain")
@@ -188,7 +188,7 @@ async def send_invite_email(email: str, invite_token: str, project_name: str, in
           </div>
           <div class="content">
             <p>Hi there,</p>
-            <p><strong>{invited_by}</strong> has invited you to join the project <strong>{project_name}</strong> on QA Test Dashboard.</p>
+            <p><strong>{invited_by}</strong> has invited you to join the project <strong>{project_name}</strong> on QA Dashboard.</p>
             <p>Your role: <span class="role-badge">{role.upper()}</span></p>
             <p>Click the button below to accept the invitation:</p>
             <p style="text-align: center;">
@@ -202,7 +202,7 @@ async def send_invite_email(email: str, invite_token: str, project_name: str, in
             <p>If you don't have an account yet, you'll need to register first before accepting the invitation.</p>
           </div>
           <div class="footer">
-            <p>QA Test Dashboard - Collaborative Test Case Management</p>
+            <p>QA Dashboard - Collaborative Test Case Management</p>
             <p>This is an automated email, please do not reply.</p>
           </div>
         </div>
@@ -216,7 +216,7 @@ async def send_invite_email(email: str, invite_token: str, project_name: str, in
     
     Hi there,
     
-    {invited_by} has invited you to join the project "{project_name}" on QA Test Dashboard.
+    {invited_by} has invited you to join the project "{project_name}" on QA Dashboard.
     
     Your role: {role.upper()}
     
@@ -228,7 +228,7 @@ async def send_invite_email(email: str, invite_token: str, project_name: str, in
     If you don't have an account yet, you'll need to register first.
     
     ---
-    QA Test Dashboard
+    QA Dashboard
     """
     
     part1 = MIMEText(text_body, "plain")

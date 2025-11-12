@@ -254,12 +254,38 @@ const Dashboard = () => {
           <div className="lg:col-span-3">
             {selectedProject ? (
               <>
-                <TeamManagement
-                  project={selectedProject}
-                  isOwner={selectedProject.owner_id === user?.id}
-                  canManageTeam={canManageTeam(selectedProject)}
-                  onUpdate={() => setProjectRefreshKey(prev => prev + 1)}
-                />
+                {/* Team Management Dropdown */}
+                <div className="glass-effect rounded-2xl mb-4">
+                  <button
+                    onClick={() => setShowTeamManagement(!showTeamManagement)}
+                    className="w-full p-4 flex items-center justify-between hover:bg-gray-50 rounded-2xl transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Users size={20} className="text-blue-600" />
+                      <h3 className="text-lg font-semibold text-gray-900">Team Members</h3>
+                      <span className="text-sm text-gray-500">
+                        ({selectedProject.members?.length || 0} {selectedProject.members?.length === 1 ? 'member' : 'members'})
+                      </span>
+                    </div>
+                    {showTeamManagement ? (
+                      <ChevronUp size={20} className="text-gray-600" />
+                    ) : (
+                      <ChevronDown size={20} className="text-gray-600" />
+                    )}
+                  </button>
+                  
+                  {showTeamManagement && (
+                    <div className="border-t border-gray-200">
+                      <TeamManagement
+                        project={selectedProject}
+                        isOwner={selectedProject.owner_id === user?.id}
+                        canManageTeam={canManageTeam(selectedProject)}
+                        onUpdate={() => setProjectRefreshKey(prev => prev + 1)}
+                      />
+                    </div>
+                  )}
+                </div>
+                
                 <TestCaseList project={selectedProject} userRole={getProjectRole(selectedProject)} />
               </>
             ) : (

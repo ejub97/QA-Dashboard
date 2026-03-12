@@ -1,0 +1,309 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { useAuth } from '@/contexts/AuthContext';
+import ProjectList from './ProjectList';
+import TestCaseList from './TestCaseListEnhanced';
+import TeamManagement from './TeamManagement';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { FileText, Plus, LogOut, Moon, Sun, User, ChevronDown, ChevronUp, Users } from 'lucide-react';
+
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const API = `${BACKEND_URL}/api`;
+
+const Dashboard = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [projects, setProjects] = useState([]);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showProjectDialog, setShowProjectDialog] = useState(false);
+  const [projectForm, setProjectForm] = useState({ name: '', description: '' });
+  const [darkMode, setDarkMode] = useState(false);
+  const [projectRefreshKey, setProjectRefreshKey] = useState(0);
+  const [showTeamManagement, setShowTeamManagement] = useState(false);
+
+  useEffect(() => {
+    const savedDarkMode = localStorage.getItem('darkMode') === 'true';
+    setDarkMode(savedDarkMode);
+    if (savedDarkMode) {
+      document.body.classList.add('dark-mode');
+    }
+  }, []);
+
+  const toggleDarkMode = () => {
+    const newDarkMode = !darkMode;
+    setDarkMode(newDarkMode);
+    localStorage.setItem('darkMode', newDarkMode.toString());
+    if (newDarkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+  };
+
+  useEffect(() => {
+    loadProjects();
+  }, [projectRefreshKey]);
+
+  const loadProjects = async () => {
+    try {
+      const response = await axios.get(`${API}/projects`);
+      setProjects(response.data);
+      if (response.data.length > 0 && !selectedProject) {
+        setSelectedProject(response.data[0]);
+      }
+    } catch (error) {
+      console.error('Failed to load projects', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createProject = async (e) => {
+    e.preventDefault();
+    if (!projectForm.name.trim()) {
+      alert('Project name is required');
+      return;
+    }
+
+    try {
+      const response = await axios.post(`${API}/projects`, projectForm);
+      setProjects([...projects, response.data]);
+      setSelectedProject(response.data);
+      setProjectForm({ name: '', description: '' });
+      setShowProjectDialog(false);
+    } catch (error) {
+      console.error('Failed to create project', error);
+      alert('Failed to create project');
+    }
+  };
+
+  const renameProject = async (projectId, name, description) => {
+    try {
+      await axios.put(`${API}/projects/${projectId}?name=${encodeURIComponent(name)}&description=${encodeURIComponent(description)}`);
+      const updatedProjects = projects.map(p => 
+        p.id === projectId ? { ...p, name, description } : p
+      );
+      setProjects(updatedProjects);
+      if (selectedProject?.id === projectId) {
+        setSelectedProject({ ...selectedProject, name, description });
+      }
+    } catch (error) {
+      console.error('Failed to rename project', error);
+      alert(error.response?.data?.detail || 'Failed to rename project');
+    }
+  };
+
+  const deleteProject = async (projectId) => {
+    try {
+      await axios.delete(`${API}/projects/${projectId}`);
+      const updatedProjects = projects.filter(p => p.id !== projectId);
+      setProjects(updatedProjects);
+      
+      // If deleted project was selected, select another or clear
+      if (selectedProject?.id === projectId) {
+        setSelectedProject(updatedProjects.length > 0 ? updatedProjects[0] : null);
+      }
+    } catch (error) {
+      console.error('Failed to delete project', error);
+      alert(error.response?.data?.detail || 'Failed to delete project');
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const getProjectRole = (project) => {
+    if (!user) return null;
+    if (project.owner_id === user.id) return 'owner';
+    const member = project.members?.find(m => m.user_id === user.id);
+    return member?.role || null;
+  };
+
+  const canManageTeam = (project) => {
+    const role = getProjectRole(project);
+    return role === 'owner' || role === 'admin';
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-lg text-gray-600">Loading...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="glass-effect rounded-2xl p-6 mb-6">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            {/* Title - Left side */}
+            <div>
+              <h1 className="text-4xl font-bold text-gray-900 mb-2" data-testid="dashboard-title">
+                <FileText className="inline-block mr-3 mb-1" size={36} />
+                QA Dashboard
+              </h1>
+              <p className="text-gray-600">Manage your test cases efficiently</p>
+            </div>
+            
+            {/* Right side - Vertical stack on desktop, stacked on mobile */}
+            <div className="flex flex-col gap-3">
+              {/* Top row: User info and Dark mode */}
+              <div className="flex items-center gap-3 md:justify-end">
+                <div className="text-left md:text-right">
+                  <p className="text-sm font-medium text-gray-900">{user?.full_name}</p>
+                  <p className="text-xs text-gray-500">@{user?.username}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={toggleDarkMode}
+                  data-testid="dark-mode-toggle"
+                  className="btn-secondary"
+                >
+                  {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+                </Button>
+              </div>
+              
+              {/* Bottom row: Logout and New Project buttons */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleLogout}
+                  data-testid="logout-btn"
+                  className="btn-secondary flex-1 md:flex-none"
+                >
+                  <LogOut size={16} className="mr-2" />
+                  Logout
+                </Button>
+                <Dialog open={showProjectDialog} onOpenChange={setShowProjectDialog}>
+                  <DialogTrigger asChild>
+                    <Button className="btn-dark flex-1 md:flex-none" data-testid="create-project-btn">
+                      <Plus className="mr-2" size={18} />
+                      New Project
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent data-testid="project-dialog">
+                    <DialogHeader>
+                      <DialogTitle>Create New Project</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={createProject} className="space-y-4">
+                      <div>
+                        <Label htmlFor="project-name">Project Name *</Label>
+                        <Input
+                          id="project-name"
+                          data-testid="project-name-input"
+                          placeholder="Enter project name"
+                          value={projectForm.name}
+                          onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+                          className="input-focus"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="project-description">Description</Label>
+                        <Textarea
+                          id="project-description"
+                          data-testid="project-description-input"
+                          placeholder="Enter project description"
+                          value={projectForm.description}
+                          onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                          rows={3}
+                          className="input-focus"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" onClick={() => setShowProjectDialog(false)} data-testid="cancel-project-btn">
+                          Cancel
+                        </Button>
+                        <Button type="submit" className="btn-dark" data-testid="submit-project-btn">
+                          Create Project
+                        </Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Projects Sidebar */}
+          <div className="lg:col-span-1">
+            <ProjectList
+              projects={projects}
+              selectedProject={selectedProject}
+              onSelectProject={setSelectedProject}
+              onDeleteProject={deleteProject}
+              onRenameProject={renameProject}
+              user={user}
+            />
+          </div>
+
+          {/* Test Cases Main Area */}
+          <div className="lg:col-span-3">
+            {selectedProject ? (
+              <>
+                {/* Team Management Dropdown */}
+                <div className="glass-effect rounded-2xl mb-4">
+                  <button
+                    onClick={() => setShowTeamManagement(!showTeamManagement)}
+                    className="w-full p-4 flex items-center justify-between hover:bg-gray-50 rounded-2xl transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Users size={20} className="text-blue-600" />
+                      <h3 className="text-lg font-semibold text-gray-900">Team Members</h3>
+                      <span className="text-sm text-gray-500">
+                        ({selectedProject.members?.length || 0} {selectedProject.members?.length === 1 ? 'member' : 'members'})
+                      </span>
+                    </div>
+                    {showTeamManagement ? (
+                      <ChevronUp size={20} className="text-gray-600" />
+                    ) : (
+                      <ChevronDown size={20} className="text-gray-600" />
+                    )}
+                  </button>
+                  
+                  {showTeamManagement && (
+                    <div className="border-t border-gray-200">
+                      <TeamManagement
+                        project={selectedProject}
+                        isOwner={selectedProject.owner_id === user?.id}
+                        canManageTeam={canManageTeam(selectedProject)}
+                        onUpdate={() => setProjectRefreshKey(prev => prev + 1)}
+                      />
+                    </div>
+                  )}
+                </div>
+                
+                <TestCaseList project={selectedProject} userRole={getProjectRole(selectedProject)} />
+              </>
+            ) : (
+              <div className="glass-effect rounded-2xl p-12 text-center">
+                <FileText className="mx-auto mb-4 text-gray-400" size={64} />
+                <h3 className="text-xl font-semibold text-gray-700 mb-2">No Project Selected</h3>
+                <p className="text-gray-500 mb-6">Create a new project or select an existing one to get started</p>
+                <Button onClick={() => setShowProjectDialog(true)} className="btn-dark">
+                  <Plus className="mr-2" size={18} />
+                  Create Your First Project
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;
